@@ -1,0 +1,19 @@
+* 0.5.3 - bugfix: copying a file into a mounted archive failed when target
+          existed and was not modified before. Fixed that.
+* 0.5.2 - bugfix: fix for archives that contain files inside directories before
+          the directory entry itself
+* 0.5.1 - bugfix: when filenames inside an archive started with "./" they were
+          not shown. Fixed that.
+* 0.5.0 - bugfix: everytime a file was created where the uid or gid could not
+          be resolved into a user/group name, the previous version crashed
+* 0.4.0 - write support (everything but symlinks); NO GUARANTEE FOR YOUR DATA
+        - the usual amount of bug fixes
+        - new parameter "-v" / "--version"
+        - made dist-target in Makefile work
+        - version numbers have three parts now, major, minor and release
+* 0.3   - preliminary write support (metadata only)
+        - many many bugfixes, especially reading works now more than once..
+* 0.2   - major code cleanup
+        - implemented ar_readlink()
+* 0.1   - initial release, read-only support
+
