@@ -4,7 +4,11 @@ SRC = archivemount.c
 OBJ = $(SRC:.c=.o)
 
 CTAGS = ctags
-RM = rm -f
+BZR = bzr
+MKDIR = mkdir
+RM = rm -rf
+CP = cp -a
+TAR = tar
 CC = gcc
 all: $(EXE)
 
@@ -25,6 +29,14 @@ tags: $(SRC) $(SRC:.c=.h)
 
 clean:
 	$(RM) $(OBJ) $(EXE) dep tags
+
+dist: $(EXE)
+	VERSION="`./$(EXE) --version`"; \
+	PV="$(PROJECT)-$$VERSION"; \
+	$(MKDIR) "$$PV"; \
+	$(CP) `bzr inventory` "$$PV"; \
+	$(TAR) cvzf "$$PV.tar.gz" "$$PV"; \
+	$(RM) "$$PV"; \
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
