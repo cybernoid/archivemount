@@ -1,3 +1,4 @@
 archivemount
 dep
 *.o
+*.swp

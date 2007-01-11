@@ -4,11 +4,8 @@ SRC = archivemount.c
 OBJ = $(SRC:.c=.o)
 
 CTAGS = ctags
-BZR = bzr
-MKDIR = mkdir
+GIT = git
 RM = rm -rf
-CP = cp -a
-TAR = tar
 CC = gcc
 all: $(EXE)
 
@@ -33,10 +30,7 @@ clean:
 dist: $(EXE)
 	VERSION="`./$(EXE) --version`"; \
 	PV="$(PROJECT)-$$VERSION"; \
-	$(MKDIR) "$$PV"; \
-	$(CP) `bzr inventory` "$$PV"; \
-	$(TAR) cvzf "$$PV.tar.gz" "$$PV"; \
-	$(RM) "$$PV"; \
+    	$(GIT) archive --format=tar --prefix=$$PV/ HEAD | gzip - >$$PV.tar.gz
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
