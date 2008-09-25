@@ -5,7 +5,7 @@
    This program can be distributed under the terms of the GNU GPL.
    See the file COPYING.
 
-   Based on: fusexmp.c by Miklos Szeredi
+   Based on: fusexmp.c and sshfs.c by Miklos Szeredi <miklos@szeredi.hu>
 
 */
 
@@ -19,7 +19,7 @@
 #define _GNU_SOURCE 1
 #endif
 
-#define FUSE_USE_VERSION 22
+#define FUSE_USE_VERSION 26
 #define MAXBUF 4096
 
 #include <fuse.h>
@@ -31,7 +31,8 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
-#include <sys/statfs.h>
+#include <sys/statvfs.h>
+#include <sys/syslimits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -1605,13 +1606,24 @@ ar_utime( const char *path, struct utimbuf *buf )
 }
 
 static int
-ar_statfs( const char *path, struct statfs *stbuf )
+ar_statfs( const char *path, struct statvfs *stbuf )
 {
-	/* ENOSYS is ok for this, we have no statistics */
-	( void )path;
-	( void )stbuf;
+  	( void )path;
 
-	return -ENOSYS;
+
+	/* Adapted the following from sshfs.c */
+
+	stbuf->f_namemax = 255;
+	stbuf->f_bsize = 4096;
+	/*
+	 * df seems to use f_bsize instead of f_frsize, so make them
+	 * the same
+	 */
+	stbuf->f_frsize = stbuf->f_bsize;
+	stbuf->f_blocks = stbuf->f_bfree =  stbuf->f_bavail =
+		1000ULL * 1024 * 1024 * 1024 / stbuf->f_frsize;
+	stbuf->f_files = stbuf->f_ffree = 1000000000;
+	return 0;
 }
 
 static int
@@ -1834,7 +1846,7 @@ main( int argc, char **argv )
 	oldpwd = open( ".", 0 );
 
 	/* now do the real mount */
-	fuse_ret = fuse_main( argc - 1, argv, &ar_oper );
+	fuse_ret = fuse_main( argc - 1, argv, &ar_oper, NULL );
 
 	/* go back to saved dir */
 	fchdir( oldpwd );
