@@ -590,6 +590,7 @@ save( const char *archiveFile )
 		return 0 - err;
 	}
 	archiveFd = open( oldfilename, O_RDONLY );
+	free( oldfilename );
 	/* open old archive */
 	oldarc = archive_read_new();
 	if( archive_read_support_compression_all( oldarc ) != ARCHIVE_OK ) {
