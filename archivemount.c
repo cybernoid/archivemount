@@ -32,7 +32,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/statvfs.h>
-#include <sys/syslimits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -563,11 +562,14 @@ save( const char *archiveFile )
 	int tempfile;
 	int format;
 	int compression;
-	char oldfilename[PATH_MAX];
+	char *oldfilename;
 	NODE *node;
-	char buf[PATH_MAX];
 
-	getcwd( buf, PATH_MAX );
+	oldfilename = malloc( strlen( archiveFile ) + 5 + 1 );
+	if( !oldfilename ) {
+		log( "Could not allocate memory for oldfilename" );
+		return 0 - ENOMEM;
+	}
 	/* unfortunately libarchive does not support modification of
 	 * compressed archives, so a new archive has to be written */
 	/* rename old archive */
@@ -575,8 +577,15 @@ save( const char *archiveFile )
 	close( archiveFd );
 	if( rename( archiveFile, oldfilename ) < 0 ) {
 		int err = errno;
+		char *buf = NULL;
+		char *unknown = "<unknown>";
+		if( getcwd( buf, 0 ) == NULL ) {
+			/* getcwd failed, set buf to sth. reasonable */
+			buf = unknown;
+		}
 		log( "Could not rename old archive file (%s/%s): %s",
 				buf, archiveFile, strerror( err ) );
+		free( buf );
 		archiveFd = open( archiveFile, O_RDONLY );
 		return 0 - err;
 	}
@@ -933,7 +942,7 @@ ar_mkdir( const char *path, mode_t mode )
 		archive_entry_set_pathname( node->entry, node->name );
 	}
 	if( ( tmp = update_entry_stat( node ) ) < 0 ) {
-		log( "mknod: error stat'ing dir %s: %s", node->location,
+		log( "mkdir: error stat'ing dir %s: %s", node->location,
 				strerror( 0 - tmp ) );
 		rmdir( location );
 		free( location );
