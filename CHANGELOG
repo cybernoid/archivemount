@@ -1,3 +1,7 @@
+* 0.6.0 - contributions by Thomas J. Duck:
+          * autoconf/automake support
+	  * bug reports and fixes for mac-fuse
+	  many thanks for this!
 * 0.5.3 - bugfix: copying a file into a mounted archive failed when target
           existed and was not modified before. Fixed that.
 * 0.5.2 - bugfix: fix for archives that contain files inside directories before

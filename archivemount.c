@@ -9,10 +9,6 @@
 
 */
 
-#define VER_MAJOR 0
-#define VER_MINOR 5
-#define VER_RELEASE 3
-
 #ifdef linux
 /* For pread()/pwrite() */
 #define _XOPEN_SOURCE 500
@@ -21,6 +17,8 @@
 
 #define FUSE_USE_VERSION 26
 #define MAXBUF 4096
+
+#include "config.h"
 
 #include <fuse.h>
 #include <stdio.h>
@@ -1814,7 +1812,7 @@ main( int argc, char **argv )
 			strcmp( argv[1], "--version" ) == 0 )
 	{
 		/* print version information and exit */
-		printf( "%d.%d.%d\n", VER_MAJOR, VER_MINOR, VER_RELEASE );
+		printf( "%s\n", VERSION );
 		return EXIT_SUCCESS;
 	}
 	if( argc < 3 ) {
