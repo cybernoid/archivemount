@@ -1511,6 +1511,7 @@ ar_unlink( const char *path )
 {
 	NODE *node;
 
+	//log( "unlink called, %s", path );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -1543,6 +1544,7 @@ ar_chmod( const char *path, mode_t mode )
 {
 	NODE *node;
 
+	//log( "chmod called, %s", path );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -1568,6 +1570,7 @@ ar_chown( const char *path, uid_t uid, gid_t gid )
 {
 	NODE *node;
 
+	//log( "chown called, %s", path );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -1592,6 +1595,7 @@ ar_utime( const char *path, struct utimbuf *buf )
 {
 	NODE *node;
 
+	//log( "utime called, %s", path );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -1618,6 +1622,7 @@ ar_statfs( const char *path, struct statvfs *stbuf )
 {
   	( void )path;
 
+	//log( "statfs called, %s", path );
 
 	/* Adapted the following from sshfs.c */
 
@@ -1686,6 +1691,7 @@ ar_readlink( const char *path, char *buf, size_t size )
 	NODE *node;
 	const char *tmp;
 
+	//log( "readlink called, %s", path );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
 		return -ENOENT;
@@ -1703,6 +1709,7 @@ ar_open( const char *path, struct fuse_file_info *fi )
 {
 	NODE *node;
 
+	//log( "open called, %s", path );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
 		return -ENOENT;
@@ -1755,10 +1762,81 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	return 0;
 }
 
+static int
+ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
+{
+	NODE *node;
+	char *location;
+	int tmp;
+
+	/* the implementation of this function is mostly copy-paste from
+	   mknod, with the exception that the temp file is created with
+	   creat() instead of mknod() */
+	//log( "create called, %s", path );
+	if( ! archiveWriteable ) {
+		return -EROFS;
+	}
+	/* check for existing node */
+	node = get_node_for_path( root, path );
+	if( node ) {
+		return -EEXIST;
+	}
+	/* create name for temp file */
+	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+		return tmp;
+	}
+	/* create temp file */
+	if( creat( location, mode ) == -1 ) {
+		log( "Could not create temporary file %s: %s",
+				location, strerror( errno ) );
+		free( location );
+		return 0 - errno;
+	}
+	/* build node */
+	node = ( NODE * )malloc( sizeof( NODE ) );
+	init_node( node );
+	node->location = location;
+	node->modified = 1;
+	node->name = strdup( path );
+	/* build entry */
+	node->entry = archive_entry_new();
+	if( root->child &&
+			node->name[0] == '/' &&
+			archive_entry_pathname( root->child->entry )[0] != '/' )
+	{
+		archive_entry_set_pathname( node->entry, node->name + 1 );
+	} else {
+		archive_entry_set_pathname( node->entry, node->name );
+	}
+	if( ( tmp = update_entry_stat( node ) ) < 0 ) {
+		log( "mknod: error stat'ing file %s: %s", node->location,
+				strerror( 0 - tmp ) );
+		unlink( location );
+		free( location );
+		free( node->name );
+		archive_entry_free( node->entry );
+		free( node );
+		return tmp;
+	}
+	/* add node to tree */
+	if( insert_by_path( root, node ) != 0 ) {
+		log( "ERROR: could not insert %s into tree",
+				node->name );
+		unlink( location );
+		free( location );
+		free( node->name );
+		archive_entry_free( node->entry );
+		free( node );
+		return -ENOENT;
+	}
+	/* clean up */
+	archiveModified = 1;
+	return 0;
+}
+
 static struct fuse_operations ar_oper = {
 	.getattr	= ar_getattr,
 	.readlink	= ar_readlink,
-	.readdir	= ar_readdir,
 	.mknod		= ar_mknod,
 	.mkdir		= ar_mkdir,
 	.symlink	= ar_symlink,
@@ -1774,16 +1852,30 @@ static struct fuse_operations ar_oper = {
 	.read		= ar_read,
 	.write		= ar_write,
 	.statfs		= ar_statfs,
+	//.flush          = ar_flush,  // int(*flush )(const char *, struct fuse_file_info *)
 	.release	= ar_release,
 	.fsync		= ar_fsync,
 /*
 #ifdef HAVE_SETXATTR
-	.setxattr	= xmp_setxattr,
-	.getxattr	= xmp_getxattr,
-	.listxattr	= xmp_listxattr,
-	.removexattr	= xmp_removexattr,
+	.setxattr	= ar_setxattr,
+	.getxattr	= ar_getxattr,
+	.listxattr	= ar_listxattr,
+	.removexattr	= ar_removexattr,
 #endif
 */
+	//.opendir        = ar_opendir,    // int(*opendir )(const char *, struct fuse_file_info *)
+	.readdir	= ar_readdir,
+	//.releasedir     = ar_releasedir, // int(*releasedir )(const char *, struct fuse_file_info *)
+	//.fsyncdir       = ar_fsyncdir,   // int(*fsyncdir )(const char *, int, struct fuse_file_info *)
+	//.init           = ar_init,       // void *(*init )(struct fuse_conn_info *conn)
+	//.destroy        = ar_destroy,    // void(*destroy )(void *)
+	//.access         = ar_access,     // int(*access )(const char *, int)
+	.create         = ar_create,
+	//.ftruncate      = ar_ftruncate,  // int(*ftruncate )(const char *, off_t, struct fuse_file_info *)
+	//.fgetattr       = ar_fgetattr,   // int(*fgetattr )(const char *, struct stat *, struct fuse_file_info *)
+	//.lock           = ar_lock,       // int(*lock )(const char *, struct fuse_file_info *, int cmd, struct flock *)
+	//.utimens        = ar_utimens,    // int(*utimens )(const char *, const struct timespec tv[2])
+	//.bmap           = ar_bmap,       // int(*bmap )(const char *, size_t blocksize, uint64_t *idx)
 };
 
 void
