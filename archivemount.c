@@ -878,7 +878,7 @@ ar_getattr( const char *path, struct stat *stbuf )
 {
 	NODE *node;
 
-	//log( "getattr got path: '%s'\n", path );
+	//log( "getattr got path: '%s'", path );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
 		return -ENOENT;
@@ -904,6 +904,7 @@ ar_mkdir( const char *path, mode_t mode )
 	char *location;
 	int tmp;
 
+	//log( "mkdir called, path '%s', mode %o", path, mode );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -912,11 +913,11 @@ ar_mkdir( const char *path, mode_t mode )
 	if( node ) {
 		return -EEXIST;
 	}
-	/* create name for temp file */
+	/* create name for temp dir */
 	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
 		return tmp;
 	}
-	/* create temp file */
+	/* create temp dir */
 	if( mkdir( location, mode ) == -1 ) {
 		log( "Could not create temporary dir %s: %s",
 				location, strerror( errno ) );
@@ -1327,6 +1328,7 @@ ar_write( const char *path, const char *buf, size_t size,
 	int tmp;
 	int fh;
 
+	//log( "write called for file '%s'", path );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
@@ -1544,7 +1546,7 @@ ar_chmod( const char *path, mode_t mode )
 {
 	NODE *node;
 
-	//log( "chmod called, %s", path );
+	//log( "chmod called, path '%s', mode: %o", path, mode );
 	if( ! archiveWriteable ) {
 		return -EROFS;
 	}
