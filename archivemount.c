@@ -1564,6 +1564,10 @@ ar_chmod( const char *path, mode_t mode )
 		/* file is a symlink, recurse into it */
 		return ar_chmod( archive_entry_symlink( node->entry ), mode );
 	}
+#ifdef __APPLE__
+	/* Make sure the full mode, including file type information, is used */
+	mode = (0777000 & archive_entry_mode(node->entry)) | (0000777 & mode);
+#endif // __APPLE__
 	archive_entry_set_mode( node->entry, mode );
 	archiveModified = 1;
 	return 0;
