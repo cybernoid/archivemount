@@ -494,8 +494,6 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 			log( "Could not lstat temporary file %s: ",
 					node->location,
 					strerror( errno ) );
-			archive_entry_free( wentry );
-			close( fh );
 			return;
 		}
 		archive_entry_copy_stat( wentry, &st );
@@ -505,7 +503,6 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 			log( "Fatal error opening modified file %s at "
 					"location %s, giving up",
 					node->name, node->location );
-			archive_entry_free( wentry );
 			return;
 		}
 		/* write header */
@@ -526,7 +523,6 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 					node->location,
 					node->name,
 					strerror( errno ) );
-			archive_entry_free( wentry );
 			close( fh );
 			return;
 		}
