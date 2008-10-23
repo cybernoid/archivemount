@@ -510,17 +510,19 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 		}
 		/* write header */
 		archive_write_header( newarc, wentry );
-		/* copy data */
-		buf = malloc( MAXBUF );
-		while( ( len = pread( fh, buf, ( size_t )MAXBUF,
-						offset ) ) > 0 )
-		{
-			archive_write_data( newarc, buf, len );
-			offset += len;
+		if( S_ISREG( st.st_mode ) ) {
+			/* regular file, copy data */
+			buf = malloc( MAXBUF );
+			while( ( len = pread( fh, buf, ( size_t )MAXBUF,
+							offset ) ) > 0 )
+			{
+				archive_write_data( newarc, buf, len );
+				offset += len;
+			}
+			free( buf );
 		}
-		free( buf );
 		if( len == -1 ) {
-			log( "Error reading temporary file %s for file %s: ",
+			log( "Error reading temporary file %s for file %s: %s",
 					node->location,
 					node->name,
 					strerror( errno ) );
