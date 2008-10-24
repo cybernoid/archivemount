@@ -1,10 +1,12 @@
 # Process this file with autoconf to produce a configure script
 
-AC_INIT([archivemount],[0.6.0], [andrel@cybernoia.de] ) 
+AC_INIT([archivemount],[0.6.0], [andrel@cybernoia.de]) 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC 
 
 CFLAGS="-O2"
+
+AC_ARG_ENABLE(debug, [  --enable-debug          enables building debug version])
 AM_CONDITIONAL(DEBUG, test "$enable_debug" = yes)
 
 AC_CONFIG_HEADERS([config.h]) 
