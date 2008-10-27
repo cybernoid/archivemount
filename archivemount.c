@@ -260,7 +260,7 @@ build_tree( const char *mtpt )
 		return errno;
 	}
 	archive_entry_set_gid( root->entry, getgid() );
-	archive_entry_set_gid( root->entry, getuid() );
+	archive_entry_set_uid( root->entry, getuid() );
 	archive_entry_set_mode( root->entry, st.st_mtime );
 	archive_entry_set_pathname( root->entry, "/" );
 	archive_entry_set_size( root->entry, st.st_size );
@@ -1751,6 +1751,9 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 		log( "path '%s' not found", path );
 		return -ENOENT;
 	}
+
+        filler( buf, ".", NULL, 0 );
+        filler( buf, "..", NULL, 0 );
 
 	node = node->child;
 	while( node ) {
