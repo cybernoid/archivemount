@@ -8,4 +8,6 @@ else
 archivemount_CFLAGS += -O2
 endif
 
+man_MANS = archivemount.1
+dist_man_MANS = archivemount.1
 EXTRA_DIST = CHANGELOG

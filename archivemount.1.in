@@ -1,0 +1,445 @@
+\" Process this file with
+.\" groff -man -Tascii archivemount.1
+.\"
+.TH ARCHIVEMOUNT "1" "@RELEASE_DATE@" "ARCHIVEMOUNT version @VERSION@" "User Commands"
+.SH NAME
+archivemount \- mounts an archive for access as a file system
+.SH SYNOPSIS
+\fBarchivemount\fP [\fB-hVdfs\fP] [\fB-o\fP \fIoptions\fP] \fIarchivepath\fP \fImountpoint\fP 
+.SH DESCRIPTION
+The \fBarchivemount\fP command mounts the file tree contained in the archive 
+\fIarchivepath\fP on the directory \fImountpoint\fP.  The archive's contents
+can subsequently be accessed inside \fImountpoint\fP as a file system.  The 
+\fBumount\fP(8) command performs the corresponding unmount operation.
+
+\fBarchivemount\fP is known to work under both linux and Mac OS X (via 
+MacFUSE).
+
+
+.SH EXAMPLE SESSION
+
+Consider the gzipped tar archive ``files.tgz'' containing files ``file1'' and 
+``file2'', and an empty directory ``mnt''.
+
+.nf
+$ ls
+files.tgz    mnt/
+
+$ archivemount files.tgz mnt
+
+.nf
+$ ls mnt
+file1    file2
+
+[... Perform desired read/write operations on the archive via mnt/ ...]
+
+.nf
+$ umount mnt
+
+[... Any changes are saved to the archive ...]
+
+.SH ARCHIVE FORMATS
+
+Archive format support is provided by the \fBlibarchive\fP(3) library.
+Read operations are supported for:
+.RS
+.IP \(bu
+old-style tar archives,
+.IP \(bu
+most variants of the POSIX ``ustar'' format,
+.IP \(bu 
+the POSIX ``pax interchange'' format,
+.IP \(bu 
+GNU-format tar archives,
+.IP \(bu 
+most common cpio archive formats,
+.IP \(bu 
+ISO9660 CD images (with or without RockRidge extensions),
+.IP \(bu 
+Zip archives.
+.RE
+
+Archives compressed with \fBgzip\fP(1), \fBbzip2\fP(1), or
+\fBcompress\fP(1) are automatically detected and transparently decompressed.
+
+The following formats can be written:
+.RS
+.IP \(bu 
+POSIX-standard ``ustar'' archives,
+.IP \(bu 
+POSIX ``pax interchange format'' archives,
+.IP \(bu 
+POSIX octet-oriented cpio archives,
+.IP \(bu 
+two different variants of shar archives.
+.RE
+
+Before writing, the original archive is renamed with a ``.orig'' extension 
+appended to it.  More detail about the read/write support can be found in 
+the \fBlibarchive\fP(3) documentation.
+
+
+.SH OPTIONS
+
+\fBarchivemount\fP is built upon the FUSE (Filesystem in Userspace)
+library, and the complete set of available options depends upon the
+specific FUSE implementation.  Execute \fBarchivemount -h\fP to retrieve
+a definitive list.
+
+.SS "general options"
+.TP
+\fB\-o\fR opt,[opt...]
+mount options
+.TP
+\fB\-h\fR   \fB\-\-help\fR
+print help
+.TP
+\fB\-V\fR   \fB\-\-version\fR
+print version
+
+.SS "archivemount mount options"
+
+.TP
+\fB\-o\fR readonly
+disable write support
+.TP
+\fB\-o\fR nobackup
+remove archive file backups
+
+.SS "FUSE mount options"
+
+These options are available to linux users using standard FUSE.
+
+.TP
+\fB\-d\fR   \fB\-o\fR debug
+enable debug output (implies \fB\-f\fR)
+.TP
+\fB\-f\fR
+foreground operation
+.TP
+\fB\-s\fR
+disable multi\-threaded operation
+.TP
+\fB\-o\fR allow_other
+allow access to other users
+.TP
+\fB\-o\fR allow_root
+allow access to root
+.TP
+\fB\-o\fR nonempty
+allow mounts over non\-empty file/dir
+.HP
+\fB\-o\fR default_permissions 
+enable permission checking by kernel
+.TP
+\fB\-o\fR fsname=NAME
+set filesystem name
+.TP
+\fB\-o\fR subtype=NAME
+set filesystem type
+.TP
+\fB\-o\fR large_read
+issue large read requests (2.4 only)
+.TP
+\fB\-o\fR max_read=N
+set maximum size of read requests
+.TP
+\fB\-o\fR hard_remove
+immediate removal (don't hide files)
+.TP
+\fB\-o\fR use_ino
+let filesystem set inode numbers
+.TP
+\fB\-o\fR readdir_ino
+try to fill in d_ino in readdir
+.TP
+\fB\-o\fR direct_io
+use direct I/O
+.TP
+\fB\-o\fR kernel_cache
+cache files in kernel
+.TP
+\fB\-o\fR [no]auto_cache
+enable caching based on modification times
+.TP
+\fB\-o\fR umask=M
+set file permissions (octal)
+.TP
+\fB\-o\fR uid=N
+set file owner
+.TP
+\fB\-o\fR gid=N
+set file group
+.TP
+\fB\-o\fR entry_timeout=T
+cache timeout for names (1.0s)
+.TP
+\fB\-o\fR negative_timeout=T
+cache timeout for deleted names (0.0s)
+.TP
+\fB\-o\fR attr_timeout=T
+cache timeout for attributes (1.0s)
+.TP
+\fB\-o\fR ac_attr_timeout=T
+auto cache timeout for attributes (attr_timeout)
+.TP
+\fB\-o\fR intr
+allow requests to be interrupted
+.TP
+\fB\-o\fR intr_signal=NUM
+signal to send on interrupt (10)
+.TP
+\fB\-o\fR modules=M1[:M2...]
+names of modules to push onto filesystem stack
+.TP
+\fB\-o\fR max_write=N
+set maximum size of write requests
+.TP
+\fB\-o\fR max_readahead=N
+set maximum readahead
+.TP
+\fB\-o\fR async_read
+perform reads asynchronously (default)
+.TP
+\fB\-o\fR sync_read
+perform reads synchronously
+.TP
+\fB\-o\fR atomic_o_trunc
+enable atomic open+truncate support
+
+
+.SS "MacFUSE mount options"
+
+These options are available to Mac users using MacFUSE.
+
+.TP
+\fB-o\fR allow_other
+allow access to others besides the user who mounted                             the file system
+.TP
+\fB-o\fR allow_recursion
+allow a mount point that itself resides on a MacFUSE volume (by default, 
+such mounting is disallowed)
+.TP
+\fB-o\fR allow_root
+allow access to root (can't be used with allow_other)
+.TP
+\fB-o\fR auto_xattr
+handle extended attributes entirely through ._ files
+.TP
+\fB-o\fR blocksize=SIZE
+specify block size in bytes of "storage"
+.TP
+\fB-o\fR case_insensitive
+enable case-insensitive mode
+.TP
+\fB-o\fR daemon_timeout=T
+timeout in seconds for kernel calls to daemon
+.TP
+\fB-o\fR debug
+turn on debug information printing
+.TP
+\fB-o\fR default_permissions
+let the kernel handle permission checks locally
+.TP
+\fB-o\fR defer_permissions
+defer permission checks to file operations themselves
+.TP
+\fB-o\fR direct_io
+use alternative (direct) path for kernel-user I/O
+.TP
+\fB-o\fR extended_security
+turn on Mac OS X extended security (ACLs)
+.TP
+\fB-o\fR fsid=FSID
+set the second 32-bit component of the fsid
+.TP
+\fB-o\fR fsname=NAME
+set the file system's name
+.TP
+\fB-o\fR fssubtype=NUM
+set the file system's fssubtype identifier
+.TP
+\fB-o\fR fstypename=NAME
+set the file system's type name
+.TP
+\fB-o\fR iosize=SIZE
+specify maximum I/O size in bytes
+.TP
+\fB-o\fR jail_symlinks
+contain symbolic links within the mount
+.TP
+\fB-o\fR kill_on_unmount
+kernel will send a signal (SIGKILL by default) to the daemon after unmount 
+finishes
+.TP
+\fB-o\fR local
+mark the volume as ``local'' (default is ``nonlocal'')
+.TP
+\fB-o\fR negative_vncache
+enable vnode name caching of non-existent objects
+.TP
+\fB-o\fR volname=NAME
+set the file system's volume name
+
+.TP
+\fB-o\fR noalerts
+disable all graphical alerts (if any) in MacFUSE Core
+.TP
+\fB-o\fR noappledouble
+ignore Apple Double (._) and .DS_Store files entirely
+.TP
+\fB-o\fR noapplexattr
+ignore all ``com.apple.*'' extended attributes
+.TP
+\fB-o\fR nobrowse
+mark the volume as non-browsable by the Finder
+.TP
+\fB-o\fR nolocalcaches
+meta option equivalent to noreadahead,noubc,novncache
+.TP
+\fB-o\fR noping_diskarb
+do not ping Disk Arbitration (pings by default)
+.TP
+\fB-o\fR noreadahead
+disable I/O read-ahead behavior for this file system
+.TP
+\fB-o\fR nosynconclose
+disable sync-on-close behavior (enabled by default)
+.TP
+\fB-o\fR nosyncwrites
+disable synchronous-writes behavior (dangerous)
+.TP
+\fB-o\fR noubc
+disable the unified buffer cache for this file system
+.TP
+\fB-o\fR novncache
+disable the vnode name cache for this file system
+
+.TP
+\fB-o\fR hard_remove
+immediate removal (don't hide files)
+.TP
+\fB-o\fR use_ino
+let filesystem set inode numbers
+.TP
+\fB-o\fR readdir_ino
+try to fill in d_ino in readdir
+.TP
+\fB-o\fR direct_io
+use direct I/O
+.TP
+\fB-o\fR kernel_cache
+cache files in kernel
+.TP
+\fB-o\fR [no]auto_cache
+enable caching based on modification times
+.TP
+\fB-o\fR umask=M
+set file permissions (octal)
+.TP
+\fB-o\fR uid=N
+set file owner
+.TP
+\fB-o\fR gid=N
+set file group
+.TP
+\fB-o\fR entry_timeout=T
+cache timeout for names (1.0s)
+.TP
+\fB-o\fR negative_timeout=T
+cache timeout for deleted names (0.0s)
+.TP
+\fB-o\fR attr_timeout=T
+cache timeout for attributes (1.0s)
+.TP
+\fB-o\fR ac_attr_timeout=T
+auto cache timeout for attributes (attr_timeout)
+.TP
+\fB-o\fR intr
+allow requests to be interrupted
+.TP
+\fB-o\fR intr_signal=NUM
+signal to send on interrupt (30)
+.TP
+\fB-o\fR modules=M1[:M2...]
+names of modules to push onto filesystem stack
+
+.TP
+\fB-o\fR max_write=N
+set maximum size of write requests
+.TP
+\fB-o\fR max_readahead=N
+set maximum readahead
+.TP
+\fB-o\fR async_read
+perform reads asynchronously (default)
+.TP
+\fB-o\fR sync_read
+perform reads synchronously
+
+.SS "Module options"
+.TP 
+[subdir]
+.TP
+\fB\-o\fR subdir=DIR
+prepend this directory to all paths (mandatory)
+.TP
+\fB\-o\fR [no]rellinks
+transform absolute symlinks to relative
+.TP 
+[iconv]
+.TP
+\fB\-o\fR from_code=CHARSET
+original encoding of file names (default: UTF-8)
+.TP
+\fB\-o\fR to_code=CHARSET
+new encoding of the file names (default: ISO-8859-2)
+.PD
+
+
+.SH LICENSE
+
+This sofware is free software; you can redistribute it and/or
+modify it under the terms of the GNU Library General Public
+License as published by the Free Software Foundation; either
+version 2 of the License, or (at your option) any later version.
+
+This software is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Library General Public License for more details.
+
+You should have received a copy of the GNU Library General Public
+License along with this software; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+
+.SH KNOWN BUGS
+
+This is beta software and should be treated as such.  Bug reports to the 
+AUTHORS listed below would be appreciated.
+
+
+.SH SEE ALSO
+
+.BR bzip2 (1),
+.BR compress (1),
+.BR cpio (1),
+.BR gzip (1),
+.BR libarchive (3),
+.BR pax (1),
+.BR tar (1),
+.BR umount (8),
+and
+.BR zip (1)
+
+``Filesystem in Userspace'': http://fuse.sourceforge.net/
+
+``MacFUSE'': http://code.google.com/p/macfuse/
+
+.SH "AUTHORS"
+.LP
+Archivemount is written and maintained by Andre Landwehr <andrel@cybernoia.de>.
+.LP
+This man page was written by Tom Duck <tom.duck@dal.ca> with material drawn
+from the page for \fBlibarchive\fP(3).
