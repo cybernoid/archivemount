@@ -198,9 +198,11 @@ remove_child( NODE *node )
 {
 	if( node->prev ) {
 		node->prev->next = node->next;
+		//log( "removed '%s' from parent '%s' (prev was: '%s', next was '%s')", node->name, node->parent->name, node->prev->name, node->next?node->next->name:"NULL" );
 	} else {
 		if( node->parent ) {
 			node->parent->child = node->next;
+			//log( "removed '%s' from parent '%s' (was first child, next was '%s')", node->name, node->parent->name, node->next?node->next->name:"NULL" );
 		}
 	}
 	if( node->next ) {
@@ -214,6 +216,8 @@ insert_as_child( NODE *node, NODE *parent )
 	node->parent = parent;
 	if( ! parent->child ) {
 		parent->child = node;
+		node->prev = NULL;
+		node->next = NULL;
 	} else {
 		/* find last child of parent, insert node behind it */
 		NODE *b = parent->child;
@@ -224,7 +228,7 @@ insert_as_child( NODE *node, NODE *parent )
 		node->prev = b;
 		node->next = NULL;
 	}
-	//log( "inserted '%s' as child of '%s'", node->name, parent->name );
+	//log( "inserted '%s' as child of '%s', between '%s' and '%s'", node->name, parent->name, node->prev?node->prev->name:"NULL", node->next?node->next->name:"NULL" );
 }
 
 /*
@@ -448,6 +452,30 @@ find_modified_node( NODE *start )
 		run = run->next;
 	}
 	return ret;
+}
+
+static void
+correct_hardlinks_to_node( const NODE *start, const char *old_name,
+		const char *new_name )
+{
+	const NODE *run = start;
+
+	while( run ) {
+		const char *tmp;
+		if( ( tmp = archive_entry_hardlink( run->entry ) ) ) {
+			if( strcmp( tmp, old_name ) == 0 ) {
+				/* the node in "run" is a hardlink to "node",
+				 * correct the path */
+				//log( "correcting hardlink '%s' from '%s' to '%s'", run->name, old_name, new_name);
+				archive_entry_set_hardlink(
+						run->entry, new_name );
+			}
+		}
+		if( run->child ) {
+			correct_hardlinks_to_node( run->child, old_name, new_name );
+		}
+		run = run->next;
+	}
 }
 
 static NODE *
@@ -772,28 +800,28 @@ save( const char *archiveFile )
 			|| format & ARCHIVE_FORMAT_CPIO_POSIX )
 	{
 		archive_write_set_format_cpio( newarc );
-		log( "set write format to posix-cpio" );
+		//log( "set write format to posix-cpio" );
 	} else if( format & ARCHIVE_FORMAT_SHAR
 			|| format & ARCHIVE_FORMAT_SHAR_BASE
 			|| format & ARCHIVE_FORMAT_SHAR_DUMP )
 	{
 		archive_write_set_format_shar( newarc );
-		log( "set write format to binary shar" );
+		//log( "set write format to binary shar" );
 	} else if( format & ARCHIVE_FORMAT_TAR_PAX_RESTRICTED )
 	{
 		archive_write_set_format_pax_restricted( newarc );
-		log( "set write format to binary pax restricted" );
+		//log( "set write format to binary pax restricted" );
 	} else if( format & ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE )
 	{
 		archive_write_set_format_pax( newarc );
-		log( "set write format to binary pax interchange" );
+		//log( "set write format to binary pax interchange" );
 	} else if( format & ARCHIVE_FORMAT_TAR_USTAR
 			|| format & ARCHIVE_FORMAT_TAR
 			|| format & ARCHIVE_FORMAT_TAR_GNUTAR
 			|| format == 0 )
 	{
 		archive_write_set_format_ustar( newarc );
-		log( "set write format to ustar" );
+		//log( "set write format to ustar" );
 	} else {
 		log( "writing archives of format %d (%s) is not "
 				"supported", format,
@@ -918,6 +946,7 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 	NODE *node;
 	( void )fi;
 
+	//log( "read called, path: '%s'", path );
 	/* find node */
 	node = get_node_for_path( root, path );
 	if( ! node ) {
@@ -1040,13 +1069,13 @@ _ar_getattr( const char *path, struct stat *stbuf )
 	NODE *node;
 	int ret;
 
-	//log( "getattr got path: '%s'", path );
+	//log( "getattr called, path: '%s'", path );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
 		return -ENOENT;
 	}
 	if( archive_entry_hardlink( node->entry ) ) {
-		/* file is a hardlink, recurse into it */
+		/* a hardlink, recurse into it */
 		ret = _ar_getattr( archive_entry_hardlink(
 					node->entry ), stbuf );
 		return ret;
@@ -1168,6 +1197,7 @@ ar_rmdir( const char *path )
 {
 	NODE *node;
 
+	//log( "rmdir called, path '%s'", path );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1217,7 +1247,7 @@ ar_symlink( const char *from, const char *to )
 	struct group *grp;
 
 	return -ENOSYS; /* somehow saving symlinks does not work. The code below is ok.. see write_new_modded_file() */
-	log( "symlink called, %s -> %s", from, to );
+	//log( "symlink called, %s -> %s", from, to );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1436,7 +1466,7 @@ _ar_truncate( const char *path, off_t size )
 	int tmp;
 	int fh;
 
-	//log( "truncate called" );
+	//log( "truncate called, path '%s'", path );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1569,7 +1599,7 @@ _ar_write( const char *path, const char *buf, size_t size,
 	int tmp;
 	int fh;
 
-	//log( "write called for file '%s'", path );
+	//log( "write called, path '%s'", path );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1701,7 +1731,7 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 	char *location;
 	int tmp;
 
-	//log( "mknod called, %s", path );
+	//log( "mknod called, path %s", path );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1954,9 +1984,10 @@ static int
 ar_rename( const char *from, const char *to )
 {
 	NODE *node;
-	int ret;
+	int ret = 0;
+	char *old_name;
 
-	//log( ">>ar_rename: got from: '%s', to: '%s'", from, to );
+	//log( "ar_rename called, from: '%s', to: '%s'", from, to );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
@@ -1973,20 +2004,31 @@ ar_rename( const char *from, const char *to )
 	}
 	/* meta data is changed in save() */
 	/* change node name */
-	free( node->name );
 	if( *to != '/' ) {
-	        if( ( node->name = malloc( strlen( to ) + 2 ) ) == NULL ) {
+		char *temp_name;
+	        if( ( temp_name = malloc( strlen( to ) + 2 ) ) == NULL ) {
 	                log( "Out of memory" );
 			pthread_rwlock_unlock( &lock );
 		        return -ENOMEM;
 		}
-		sprintf( node->name, "/%s", to );
+		sprintf( temp_name, "/%s", to );
+		old_name = node->name;
+		node->name = temp_name;
 	} else {
-		node->name = strdup( to );
+		char *temp_name;
+		if( ( temp_name = strdup( to ) ) == NULL ) {
+	                log( "Out of memory" );
+			pthread_rwlock_unlock( &lock );
+		        return -ENOMEM;
+		}
+		old_name = node->name;
+		node->name = temp_name;
 	}
 	node->namechanged = 1;
 	remove_child( node );
 	ret = insert_by_path( root, node );
+	correct_hardlinks_to_node( root, old_name, node->name );
+	free( old_name );
 	archiveModified = 1;
 	pthread_rwlock_unlock( &lock );
 	return ret;
@@ -2009,7 +2051,7 @@ ar_readlink( const char *path, char *buf, size_t size )
 	NODE *node;
 	const char *tmp;
 
-	//log( "readlink called, %s", path );
+	//log( "readlink called, path '%s'", path );
 	pthread_rwlock_rdlock( &lock );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
@@ -2031,7 +2073,7 @@ ar_open( const char *path, struct fuse_file_info *fi )
 {
 	NODE *node;
 
-	//log( "open called, %s", path );
+	//log( "open called, path '%s'", path );
 	pthread_rwlock_rdlock( &lock );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
@@ -2067,7 +2109,7 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) offset;
 	(void) fi;
 
-	//log( "readdir got path: '%s'", path );
+	//log( "readdir called, path: '%s'", path );
 	pthread_rwlock_rdlock( &lock );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
@@ -2104,7 +2146,7 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 	/* the implementation of this function is mostly copy-paste from
 	   mknod, with the exception that the temp file is created with
 	   creat() instead of mknod() */
-	//log( "create called, %s", path );
+	//log( "create called, path '%s'", path );
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
