@@ -561,6 +561,7 @@ rename_recursively( NODE *start, const char *from, const char *to )
 			}
 			sprintf( newName, "%s%s", to, individualName );
 		}
+		correct_hardlinks_to_node( root, node->name, newName );
 		free( node->name );
 		node->name = newName;
 		node->namechanged = 1;
@@ -1377,7 +1378,7 @@ ar_link( const char *from, const char *to )
 		return -EEXIST;
 	}
 	/* extract originals stat info */
-	ar_getattr( from, &st );
+	_ar_getattr( from, &st );
 	/* build new node */
 	if( (node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
 	        log( "Out of memory" );
