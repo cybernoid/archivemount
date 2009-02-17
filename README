@@ -7,7 +7,7 @@ archive (as in .tar.gz or .tar.bz2) and use it like an ordinary filesystem.
 
 Installation
 ------------
-From version 0.6 on archivemount uses autoconf, so just do the normal
+From version 0.6.0 on archivemount uses autoconf, so just do the normal
 
 ./configure && make && sudo make install
 
