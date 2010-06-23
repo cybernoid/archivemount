@@ -1,3 +1,4 @@
+* 0.6.1 - clarified licensing issue (thanks to Niels de Vos for pointing it out)
 * 0.6.0 - contributions by Thomas J. Duck:
           * autoconf/automake support
 	  * bug reports and fixes for mac-fuse
