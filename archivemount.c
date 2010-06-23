@@ -2,7 +2,7 @@
 
    Copyright (c) 2005 Andre Landwehr <andrel@cybernoia.de>
 
-   This program can be distributed under the terms of the GNU GPL.
+   This program can be distributed under the terms of the GNU LGPL.
    See the file COPYING.
 
    Based on: fusexmp.c and sshfs.c by Miklos Szeredi <miklos@szeredi.hu>
