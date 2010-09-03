@@ -1,16 +1,16 @@
 /*
 
-   Copyright (c) 2005 Andre Landwehr <andrel@cybernoia.de>
+   Copyright (c) 2005-2010 Andre Landwehr <andrel@cybernoia.de>
 
    This program can be distributed under the terms of the GNU LGPL.
    See the file COPYING.
 
    Based on: fusexmp.c and sshfs.c by Miklos Szeredi <miklos@szeredi.hu>
 
-*/
+   Contributions by: Niels de Vos <niels@nixpanic.net>
+                     Thomas J. Duck
 
-/* For pthread_rwlock_t */
-#define _GNU_SOURCE
+*/
 
 #ifdef linux
 /* For pread()/pwrite() */
@@ -85,8 +85,8 @@ struct options {
 
 enum
 {
-        KEY_VERSION,
-        KEY_HELP,
+	KEY_VERSION,
+	KEY_HELP,
 };
 
 #define AR_OPT(t, p, v) { t, offsetof(struct options, p), v }
@@ -117,7 +117,7 @@ static NODE *root;
 struct options options;
 char *mtpt = NULL;
 char *archiveFile = NULL;
-pthread_rwlock_t lock; /* global node tree lock */
+pthread_mutex_t lock; /* global node tree lock */
 
 
   /**********************/
@@ -146,36 +146,36 @@ static struct fuse_operations ar_oper;
 static int 
 ar_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs)
 {
-        (void) data;
+	(void) data;
 
 	switch( key ) {
 	case FUSE_OPT_KEY_OPT:
-	        return 1;
+		return 1;
 
 	case FUSE_OPT_KEY_NONOPT:
-	        if( !archiveFile ) {
-	                archiveFile = strdup(arg);
+		if( !archiveFile ) {
+			archiveFile = strdup(arg);
 			return 0;
 		} else if( !mtpt ) {
-	                mtpt = strdup(arg);
+			mtpt = strdup(arg);
 		}
 		return 1;
 
-        case KEY_HELP:
-                usage(outargs->argv[0]);
-                fuse_opt_add_arg(outargs, "-ho");
+	case KEY_HELP:
+		usage(outargs->argv[0]);
+		fuse_opt_add_arg(outargs, "-ho");
 		fuse_main( outargs->argc, outargs->argv, &ar_oper, NULL );
-                exit(1);
+		exit(1);
 
-        case KEY_VERSION:
-	        fprintf( stderr, "archivemount version %s\n", VERSION );
-                fuse_opt_add_arg(outargs, "--version");
+	case KEY_VERSION:
+		fprintf( stderr, "archivemount version %s\n", VERSION );
+		fuse_opt_add_arg(outargs, "--version");
 		fuse_main( outargs->argc, outargs->argv, &ar_oper, NULL );
-                exit(0);
+		exit(0);
 
-        default:
-                fprintf(stderr, "internal error\n");
-                abort();
+	default:
+		fprintf(stderr, "internal error\n");
+		abort();
 	}
 }
 
@@ -263,13 +263,13 @@ insert_by_path( NODE *root, NODE *node )
 			/* parent path not found, create a temporary one */
 			NODE *tempnode;
 			if( ( tempnode = malloc( sizeof( NODE ) ) ) == NULL ) {
-			        log( "Out of memory" );
+				log( "Out of memory" );
 				return -ENOMEM;
 			}
 			init_node( tempnode );
 			if( ( tempnode->name = malloc(
-			        strlen( last->name ) + namlen + 1 ) ) == NULL ) {
-			        log( "Out of memory" );
+				strlen( last->name ) + namlen + 1 ) ) == NULL ) {
+				log( "Out of memory" );
 				return -ENOMEM;
 			}
 			if( last != root ) {
@@ -278,7 +278,7 @@ insert_by_path( NODE *root, NODE *node )
 				sprintf( tempnode->name, "/%s", nam );
 			}
 			if( (tempnode->entry = archive_entry_clone( root->entry )) == NULL ) {
-			        log( "Out of memory" );
+				log( "Out of memory" );
 				return -ENOMEM;
 			}
 			/* insert it recursively */
@@ -304,8 +304,8 @@ insert_by_path( NODE *root, NODE *node )
 				archive_entry_free( node->entry );
 				if( (node->entry = archive_entry_clone(
 						tempnode->entry )) == NULL) {
-			                log( "Out of memory" );
-				        return -ENOMEM;
+					log( "Out of memory" );
+					return -ENOMEM;
 				}
 				found = 1;
 				break;
@@ -332,7 +332,7 @@ build_tree( const char *mtpt )
 
 	/* open archive */
 	if( (archive = archive_read_new()) == NULL ) {
-	        log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	if( archive_read_support_compression_all( archive ) != ARCHIVE_OK ) {
@@ -359,14 +359,14 @@ build_tree( const char *mtpt )
 	}
 	/* create root node */
 	if( (root = malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	init_node( root );
 	root->name = strdup( "/" );
 	/* fill root->entry */
 	if( (root->entry = archive_entry_new()) == NULL ) {
-	        log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	if( fstat( archiveFd, &st ) != 0 ) {
@@ -392,12 +392,12 @@ build_tree( const char *mtpt )
 		}
 		/* create node and clone the entry */
 		if( (cur = malloc( sizeof( NODE ) ) ) == NULL ) {
-	                log( "Out of memory" );
-		        return -ENOMEM;
+			log( "Out of memory" );
+			return -ENOMEM;
 		}
 		init_node( cur );
 		if( (cur->entry = archive_entry_clone( entry )) == NULL ) {
-		        log( "Out of memory" );
+			log( "Out of memory" );
 			return -ENOMEM;
 		}
 		/* normalize the name to start with "/" */
@@ -406,8 +406,8 @@ build_tree( const char *mtpt )
 			cur->name = strdup( name + 1 );
 		} else if( name[0] != '/' ) {
 			/* prepend a '/' to name */
-		        if( (cur->name = malloc( strlen( name ) + 2 ) ) == NULL ) {
-			        log( "Out of memory" );
+			if( (cur->name = malloc( strlen( name ) + 2 ) ) == NULL ) {
+				log( "Out of memory" );
 				return -ENOMEM;
 			}
 			sprintf( cur->name, "/%s", name );
@@ -547,15 +547,15 @@ rename_recursively( NODE *start, const char *from, const char *to )
 		/* change node name */
 		individualName = node->name + strlen( from );
 		if( *to != '/' ) {
-		        if( ( newName = ( char * )malloc( strlen( to ) +
-			        strlen( individualName ) + 2 ) ) == NULL ) {
-			        log( "Out of memory" );
+			if( ( newName = ( char * )malloc( strlen( to ) +
+				strlen( individualName ) + 2 ) ) == NULL ) {
+				log( "Out of memory" );
 				return -ENOMEM;
 			}
 			sprintf( newName, "/%s%s", to, individualName );
 		} else {
-		        if( ( newName = ( char * )malloc( strlen( to ) +
-			        strlen( individualName ) + 1 ) ) == NULL ) {
+			if( ( newName = ( char * )malloc( strlen( to ) +
+				strlen( individualName ) + 1 ) ) == NULL ) {
 			  log( "Out of memory" );
 			  return -ENOMEM;
 			}
@@ -585,7 +585,7 @@ get_temp_file_name( const char *path, char **location )
 			strlen( P_tmpdir ) +
 			strlen( "_archivemount" ) +
 			strlen( tmppath ) + 8 ) ) == NULL ) {
-	        log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	sprintf( *location, "%s/archivemount%s_XXXXXX", P_tmpdir, tmppath );
@@ -666,8 +666,8 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 		archive_write_header( newarc, wentry );
 		if( S_ISREG( st.st_mode ) ) {
 			/* regular file, copy data */
-		        if( ( buf = malloc( MAXBUF ) ) == NULL ) {
-			        log( "Out of memory" );
+			if( ( buf = malloc( MAXBUF ) ) == NULL ) {
+				log( "Out of memory" );
 				return;
 			}
 			while( ( len = pread( fh, buf, ( size_t )MAXBUF,
@@ -749,7 +749,7 @@ save( const char *archiveFile )
 	free( oldfilename );
 	/* open old archive */
 	if( (oldarc = archive_read_new()) == NULL ) {
-                log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	if( archive_read_support_compression_all( oldarc ) != ARCHIVE_OK ) {
@@ -776,7 +776,7 @@ save( const char *archiveFile )
 	*/
 	/* open new archive */
 	if( (newarc = archive_write_new()) == NULL ) {
-	        log( "Out of memory" );
+		log( "Out of memory" );
 		return -ENOMEM;
 	}
 	switch( compression ) {
@@ -856,7 +856,7 @@ save( const char *archiveFile )
 		}
 		/* create new entry, copy metadata */
 		if( (wentry = archive_entry_new()) == NULL ) {
-		        log( "Out of memory" );
+			log( "Out of memory" );
 			return -ENOMEM;
 		}
 		if( archive_entry_gname_w( node->entry ) ) {
@@ -985,29 +985,40 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 	} else {
 		struct archive *archive;
 		struct archive_entry *entry;
+		int archive_ret;
 		/* search file in archive */
 		realpath = archive_entry_pathname( node->entry );
 		if( (archive = archive_read_new()) == NULL ) {
-		        log( "Out of memory" );
+			log( "Out of memory" );
 			return -ENOMEM;
 		}
-		if( archive_read_support_compression_all( archive ) != ARCHIVE_OK ) {
-			log( "%s", archive_error_string( archive ) );
+		archive_ret = archive_read_support_compression_all( archive );
+		if( archive_ret != ARCHIVE_OK ) {
+			log( "archive_read_support_compression_all(): %s (%d)\n",
+				archive_error_string( archive ), archive_ret );
+			return -EIO;
 		}
-		if( archive_read_support_format_all( archive ) != ARCHIVE_OK ) {
-			log( "%s", archive_error_string( archive ) );
+		archive_ret = archive_read_support_format_all( archive );
+		if( archive_ret != ARCHIVE_OK ) {
+			log( "archive_read_support_format_all(): %s (%d)\n",
+				archive_error_string( archive ), archive_ret );
+			return -EIO;
 		}
-		if( archive_read_open_fd( archive, archiveFd, 10240 ) != ARCHIVE_OK ) {
-			log( "%s", archive_error_string( archive ) );
+		archive_ret = archive_read_open_fd( archive, archiveFd, 10240 );
+		if( archive_ret != ARCHIVE_OK ) {
+			log( "archive_read_open_fd(): %s (%d)\n",
+				archive_error_string( archive ), archive_ret );
+			return -EIO;
 		}
 		/* search for file to read */
-		while( archive_read_next_header( archive, &entry ) == ARCHIVE_OK ) {
+		while( ( archive_ret = archive_read_next_header( 
+					archive, &entry )) == ARCHIVE_OK ) {
 			const char *name;
 			name = archive_entry_pathname( entry );
 			if( strcmp( realpath, name ) == 0 ) {
 				void *trash;
 				if( ( trash = malloc( MAXBUF ) ) == NULL ) {
-				        log( "Out of memory" );
+					log( "Out of memory" );
 					return -ENOMEM;
 				}
 				/* skip offset */
@@ -1057,10 +1068,14 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 ar_read( const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi )
 {
-	int ret;
-	pthread_rwlock_rdlock(&lock);
-	ret = _ar_read( path, buf, size, offset, fi );
-	pthread_rwlock_unlock(&lock);
+	int ret = pthread_mutex_lock(&lock);
+	if ( ret ) {
+		log( "failed to get lock: %s\n", strerror(ret));
+		return -EIO;
+	} else {
+		ret = _ar_read( path, buf, size, offset, fi );
+		pthread_mutex_unlock(&lock);
+	}
 	return ret;
 }
 
@@ -1094,10 +1109,14 @@ _ar_getattr( const char *path, struct stat *stbuf )
 static int
 ar_getattr( const char *path, struct stat *stbuf )
 {
-	int ret;
-	pthread_rwlock_rdlock(&lock);
-	ret = _ar_getattr( path, stbuf );
-	pthread_rwlock_unlock(&lock);
+	int ret = pthread_mutex_lock(&lock);
+	if ( ret ) {
+		log( "failed to get lock: %s\n", strerror(ret));
+		return -EIO;
+	} else {
+		ret = _ar_getattr( path, stbuf );
+		pthread_mutex_unlock(&lock);
+	}
 	return ret;
 }
 
@@ -1115,16 +1134,16 @@ ar_mkdir( const char *path, mode_t mode )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	/* check for existing node */
 	node = get_node_for_path( root, path );
 	if( node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EEXIST;
 	}
 	/* create name for temp dir */
 	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* create temp dir */
@@ -1132,13 +1151,13 @@ ar_mkdir( const char *path, mode_t mode )
 		log( "Could not create temporary dir %s: %s",
 				location, strerror( errno ) );
 		free( location );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return 0 - errno;
 	}
 	/* build node */
 	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	init_node( node );
@@ -1148,8 +1167,8 @@ ar_mkdir( const char *path, mode_t mode )
 	node->namechanged = 0;
 	/* build entry */
 	if( (node->entry = archive_entry_new()) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	if( root->child &&
@@ -1168,7 +1187,7 @@ ar_mkdir( const char *path, mode_t mode )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* add node to tree */
@@ -1180,12 +1199,12 @@ ar_mkdir( const char *path, mode_t mode )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* clean up */
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1202,22 +1221,22 @@ ar_rmdir( const char *path )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	if( node->child ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOTEMPTY;
 	}
 	if( node->name[strlen(node->name)-1] == '.' ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EINVAL;
 	}
 	if( ! S_ISDIR( archive_entry_mode( node->entry ) ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOTDIR;
 	}
 	if( node->location ) {
@@ -1226,7 +1245,7 @@ ar_rmdir( const char *path )
 			int err = errno;
 			log( "ERROR: removing temp directory %s failed: %s",
 					node->location, strerror( err ) );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return err;
 		}
 		free( node->location );
@@ -1235,7 +1254,7 @@ ar_rmdir( const char *path )
 	free( node->name );
 	free( node );
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1252,17 +1271,17 @@ ar_symlink( const char *from, const char *to )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	/* check for existing node */
 	node = get_node_for_path( root, to );
 	if( node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EEXIST;
 	}
 	/* build node */
 	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	init_node( node );
@@ -1282,8 +1301,8 @@ ar_symlink( const char *from, const char *to )
 	st.st_atime = st.st_ctime = st.st_mtime = time( NULL );
 	/* build entry */
 	if( (node->entry = archive_entry_new()) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	if( root->child &&
@@ -1310,7 +1329,7 @@ ar_symlink( const char *from, const char *to )
 			free( node->name );
 			archive_entry_free( node->entry );
 			free( node );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
 		/* on other errors the uid just could
@@ -1329,7 +1348,7 @@ ar_symlink( const char *from, const char *to )
 			free( node->name );
 			archive_entry_free( node->entry );
 			free( node );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
 		/* on other errors the gid just could
@@ -1342,12 +1361,12 @@ ar_symlink( const char *from, const char *to )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* clean up */
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1364,25 +1383,25 @@ ar_link( const char *from, const char *to )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	/* find source node */
 	fromnode = get_node_for_path( root, from );
 	if( ! fromnode ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* check for existing target */
 	node = get_node_for_path( root, to );
 	if( node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EEXIST;
 	}
 	/* extract originals stat info */
 	_ar_getattr( from, &st );
 	/* build new node */
 	if( (node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	init_node( node );
@@ -1390,8 +1409,8 @@ ar_link( const char *from, const char *to )
 	node->modified = 1;
 	/* build entry */
 	if( (node->entry = archive_entry_new()) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	if( node->name[0] == '/' &&
@@ -1417,7 +1436,7 @@ ar_link( const char *from, const char *to )
 			free( node->name );
 			archive_entry_free( node->entry );
 			free( node );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
 		/* on other errors the uid just could
@@ -1436,7 +1455,7 @@ ar_link( const char *from, const char *to )
 			free( node->name );
 			archive_entry_free( node->entry );
 			free( node );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
 		/* on other errors the gid just could
@@ -1449,12 +1468,12 @@ ar_link( const char *from, const char *to )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* clean up */
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1514,8 +1533,8 @@ _ar_truncate( const char *path, off_t size )
 		/* copy original file to temporary file */
 		tmpsize = archive_entry_size( node->entry );
 		if( ( tmpbuf = ( char * )malloc( MAXBUF ) ) == NULL ) {
-	                log( "Out of memory" );
-		        return -ENOMEM;
+			log( "Out of memory" );
+			return -ENOMEM;
 		}
 		while( tmpsize ) {
 			int len = tmpsize > MAXBUF ? MAXBUF : tmpsize;
@@ -1584,9 +1603,9 @@ static int
 ar_truncate( const char *path, off_t size )
 {
 	int ret;
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	ret = _ar_truncate( path, size );
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return ret;
 }
 
@@ -1651,8 +1670,8 @@ _ar_write( const char *path, const char *buf, size_t size,
 		/* copy original file to temporary file */
 		tmpsize = archive_entry_size( node->entry );
 		if( ( tmpbuf = ( char * )malloc( MAXBUF ) ) == NULL ) {
-	                log( "Out of memory" );
-		        return -ENOMEM;
+			log( "Out of memory" );
+			return -ENOMEM;
 		}
 		while( tmpsize ) {
 			int len = tmpsize > MAXBUF ? MAXBUF : tmpsize;
@@ -1719,9 +1738,9 @@ ar_write( const char *path, const char *buf, size_t size,
 		off_t offset, struct fuse_file_info *fi )
 {
 	int ret;
-	pthread_rwlock_wrlock(&lock);
+	pthread_mutex_lock(&lock);
 	ret = _ar_write( path, buf, size, offset, fi );
-	pthread_rwlock_unlock(&lock);
+	pthread_mutex_unlock(&lock);
 	return ret;
 }
 
@@ -1736,16 +1755,16 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	/* check for existing node */
 	node = get_node_for_path( root, path );
 	if( node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EEXIST;
 	}
 	/* create name for temp file */
 	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* create temp file */
@@ -1753,13 +1772,13 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 		log( "Could not create temporary file %s: %s",
 				location, strerror( errno ) );
 		free( location );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return 0 - errno;
 	}
 	/* build node */
 	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	init_node( node );
@@ -1768,8 +1787,8 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 	node->name = strdup( path );
 	/* build entry */
 	if( (node->entry = archive_entry_new()) == NULL) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	if( root->child &&
@@ -1788,7 +1807,7 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* add node to tree */
@@ -1800,12 +1819,12 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* clean up */
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1818,14 +1837,14 @@ ar_unlink( const char *path )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	node = get_node_for_path( root, path );
 	if( ! node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	if( S_ISDIR( archive_entry_mode( node->entry ) ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EISDIR;
 	}
 	if( node->location ) {
@@ -1834,7 +1853,7 @@ ar_unlink( const char *path )
 			int err = errno;
 			log( "ERROR: could not unlink temporary file '%s'",
 					node->location, strerror( errno ) );
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return err;
 		}
 		free( node->location );
@@ -1843,7 +1862,7 @@ ar_unlink( const char *path )
 	free( node->name );
 	free( node );
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -1881,9 +1900,9 @@ static int
 ar_chmod( const char *path, mode_t mode )
 {
 	int ret;
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	ret = _ar_chmod( path, mode );
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return ret;
 }
 
@@ -1916,9 +1935,9 @@ static int
 ar_chown( const char *path, uid_t uid, gid_t gid )
 {
 	int ret;
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	ret = _ar_chown( path, uid, gid );
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return ret;
 }
 
@@ -1953,9 +1972,9 @@ static int
 ar_utime( const char *path, struct utimbuf *buf )
 {
 	int ret;
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	ret = _ar_utime( path, buf );
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return ret;
 }
 
@@ -1992,10 +2011,10 @@ ar_rename( const char *from, const char *to )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock(&lock);
+	pthread_mutex_lock(&lock);
 	node = get_node_for_path( root, from );
 	if( ! node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	if( node->child ) {
@@ -2007,10 +2026,10 @@ ar_rename( const char *from, const char *to )
 	/* change node name */
 	if( *to != '/' ) {
 		char *temp_name;
-	        if( ( temp_name = malloc( strlen( to ) + 2 ) ) == NULL ) {
-	                log( "Out of memory" );
-			pthread_rwlock_unlock( &lock );
-		        return -ENOMEM;
+		if( ( temp_name = malloc( strlen( to ) + 2 ) ) == NULL ) {
+			log( "Out of memory" );
+			pthread_mutex_unlock( &lock );
+			return -ENOMEM;
 		}
 		sprintf( temp_name, "/%s", to );
 		old_name = node->name;
@@ -2018,9 +2037,9 @@ ar_rename( const char *from, const char *to )
 	} else {
 		char *temp_name;
 		if( ( temp_name = strdup( to ) ) == NULL ) {
-	                log( "Out of memory" );
-			pthread_rwlock_unlock( &lock );
-		        return -ENOMEM;
+			log( "Out of memory" );
+			pthread_mutex_unlock( &lock );
+			return -ENOMEM;
 		}
 		old_name = node->name;
 		node->name = temp_name;
@@ -2031,7 +2050,7 @@ ar_rename( const char *from, const char *to )
 	correct_hardlinks_to_node( root, old_name, node->name );
 	free( old_name );
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return ret;
 }
 
@@ -2053,19 +2072,24 @@ ar_readlink( const char *path, char *buf, size_t size )
 	const char *tmp;
 
 	//log( "readlink called, path '%s'", path );
-	pthread_rwlock_rdlock( &lock );
+	int ret = pthread_mutex_lock(&lock);
+	if ( ret ) {
+		fprintf(stderr, "could not acquire lock for archive: %s\n", strerror(ret));
+		return ret;
+	}
 	node = get_node_for_path( root, path );
 	if( ! node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	if( ! S_ISLNK( archive_entry_mode( node->entry ) ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOLINK;
 	}
 	tmp = archive_entry_symlink( node->entry );
 	snprintf( buf, size, "%s", tmp );
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
+	
 	return 0;
 }
 
@@ -2075,22 +2099,26 @@ ar_open( const char *path, struct fuse_file_info *fi )
 	NODE *node;
 
 	//log( "open called, path '%s'", path );
-	pthread_rwlock_rdlock( &lock );
+	int ret = pthread_mutex_lock(&lock);
+	if ( ret ) {
+		fprintf(stderr, "could not acquire lock for archive: %s\n", strerror(ret));
+		return ret;
+	}
 	node = get_node_for_path( root, path );
 	if( ! node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	if( fi->flags & O_WRONLY || fi->flags & O_RDWR ) {
 		if( ! archiveWriteable ) {
-			pthread_rwlock_unlock( &lock );
+			pthread_mutex_unlock( &lock );
 			return -EROFS;
 		}
 	}
 	/* no need to recurse into links since function doesn't do anything */
 	/* no need to save a handle here since archives are stream based */
 	fi->fh = 0;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -2111,16 +2139,20 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) fi;
 
 	//log( "readdir called, path: '%s'", path );
-	pthread_rwlock_rdlock( &lock );
+	int ret = -EIO;
+	if ( pthread_mutex_lock( &lock ) ) {
+		fprintf(stderr, "could not acquire lock for archive: %s\n", strerror(ret));
+		return ret;
+	}
 	node = get_node_for_path( root, path );
 	if( ! node ) {
 		log( "path '%s' not found", path );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 
-        filler( buf, ".", NULL, 0 );
-        filler( buf, "..", NULL, 0 );
+	filler( buf, ".", NULL, 0 );
+	filler( buf, "..", NULL, 0 );
 
 	node = node->child;
 	while( node ) {
@@ -2133,7 +2165,7 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 			break;
 		node = node->next;
 	}
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -2151,16 +2183,16 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 	if( ! archiveWriteable || options.readonly ) {
 		return -EROFS;
 	}
-	pthread_rwlock_wrlock( &lock );
+	pthread_mutex_lock( &lock );
 	/* check for existing node */
 	node = get_node_for_path( root, path );
 	if( node ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -EEXIST;
 	}
 	/* create name for temp file */
 	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* create temp file */
@@ -2168,13 +2200,13 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 		log( "Could not create temporary file %s: %s",
 				location, strerror( errno ) );
 		free( location );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return 0 - errno;
 	}
 	/* build node */
 	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	init_node( node );
@@ -2183,8 +2215,8 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 	node->name = strdup( path );
 	/* build entry */
 	if( (node->entry = archive_entry_new()) == NULL ) {
-	        log( "Out of memory" );
-		pthread_rwlock_unlock( &lock );
+		log( "Out of memory" );
+		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
 	if( root->child &&
@@ -2203,7 +2235,7 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
 	/* add node to tree */
@@ -2215,12 +2247,12 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 		free( node->name );
 		archive_entry_free( node->entry );
 		free( node );
-		pthread_rwlock_unlock( &lock );
+		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
 	/* clean up */
 	archiveModified = 1;
-	pthread_rwlock_unlock( &lock );
+	pthread_mutex_unlock( &lock );
 	return 0;
 }
 
@@ -2286,16 +2318,16 @@ main( int argc, char **argv )
 	/* parse cmdline args */
 	memset( &options, 0, sizeof( struct options ) );
 	if( fuse_opt_parse( &args, &options, ar_opts, ar_opt_proc ) == -1 )
-                return -1;
+		return -1;
 	if( archiveFile==NULL ) {
-                fprintf(stderr, "missing archive file\n");
-                fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
-                exit(1);
+		fprintf(stderr, "missing archive file\n");
+		fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
+		exit(1);
 	}
 	if( mtpt==NULL ) {
-                fprintf(stderr, "missing mount point\n");
-                fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
-                exit(1);
+		fprintf(stderr, "missing mount point\n");
+		fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
+		exit(1);
 	}
 
 	/* check if mtpt is ok and writeable */
@@ -2327,7 +2359,7 @@ main( int argc, char **argv )
 	oldpwd = open( ".", 0 );
 
 	/* Initialize the node tree lock */
-	pthread_rwlock_init(&lock, NULL);
+	pthread_mutex_init(&lock, NULL);
 
 	/* now do the real mount */
 	fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
