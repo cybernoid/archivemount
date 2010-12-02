@@ -268,7 +268,7 @@ insert_by_path( NODE *root, NODE *node )
 			}
 			init_node( tempnode );
 			if( ( tempnode->name = malloc(
-				strlen( last->name ) + namlen + 1 ) ) == NULL ) {
+				strlen( last->name ) + namlen + 2 ) ) == NULL ) {
 				log( "Out of memory" );
 				return -ENOMEM;
 			}
