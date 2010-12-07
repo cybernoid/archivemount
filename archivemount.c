@@ -2341,11 +2341,13 @@ main( int argc, char **argv )
 		exit( EXIT_FAILURE );
 	}
 
-	/* check if archive is writeable */
-	archiveFd = open( archiveFile, O_RDWR );
-	if( archiveFd != -1 ) {
-		archiveWriteable = 1;
-		close( archiveFd );
+	if( !options.readonly ) {
+		/* check if archive is writeable */
+		archiveFd = open( archiveFile, O_RDWR );
+		if( archiveFd != -1 ) {
+			archiveWriteable = 1;
+			close( archiveFd );
+		}
 	}
 	/* open archive and read meta data */
 	archiveFd = open( archiveFile, O_RDONLY );
