@@ -197,8 +197,14 @@ init_node( )
 	node->name = NULL;
 	node->location = NULL;
 	node->namechanged = 0;
-	node->entry = NULL;
+	node->entry = archive_entry_new();
 	node->modified = 0;
+
+	if ( node->entry == NULL ) {
+		log( "Out of memory" );
+		free(node);
+		return NULL;
+	}
 
 	return node;
 }
@@ -207,10 +213,7 @@ static void
 free_node(NODE *node)
 {
 	free( node->name );
-
-	if (node->entry != null)
-		archive_entry_free(node->entry);
-
+	archive_entry_free(node->entry);
 	free(node);
 }
 
@@ -297,6 +300,9 @@ insert_by_path( NODE *root, NODE *node )
 			} else {
 				sprintf( tempnode->name, "/%s", nam );
 			}
+
+			archive_entry_free(tempnode->entry);
+
 			if( (tempnode->entry = archive_entry_clone( root->entry )) == NULL ) {
 				log( "Out of memory" );
 				return -ENOMEM;
@@ -383,10 +389,6 @@ build_tree( const char *mtpt )
 
 	root->name = strdup( "/" );
 	/* fill root->entry */
-	if( (root->entry = archive_entry_new()) == NULL ) {
-		log( "Out of memory" );
-		return -ENOMEM;
-	}
 	if( fstat( archiveFd, &st ) != 0 ) {
 		perror( "Error stat'ing archiveFile" );
 		return errno;
@@ -402,10 +404,9 @@ build_tree( const char *mtpt )
 	if( (cur = init_node() ) == NULL ) {
 		return -ENOMEM;
 	}
-	cur->entry = archive_entry_new();
 
 	/* read all entries in archive, create node for each */
-	while( archive_read_next_header2( archive, &cur->entry ) == ARCHIVE_OK ) {
+	while( archive_read_next_header2( archive, cur->entry ) == ARCHIVE_OK ) {
 		const char *name;
 		/* find name of node */
 		name = archive_entry_pathname( cur->entry );
@@ -443,7 +444,6 @@ build_tree( const char *mtpt )
 		if( (cur = init_node() ) == NULL ) {
 			return -ENOMEM;
 		}
-		cur->entry = archive_entry_new();
 
 		archive_read_data_skip( archive );
 	}
@@ -1187,11 +1187,6 @@ ar_mkdir( const char *path, mode_t mode )
 	node->name = strdup( path );
 	node->namechanged = 0;
 	/* build entry */
-	if( (node->entry = archive_entry_new()) == NULL ) {
-		log( "Out of memory" );
-		pthread_mutex_unlock( &lock );
-		return -ENOMEM;
-	}
 	if( root->child &&
 			node->name[0] == '/' &&
 			archive_entry_pathname( root->child->entry )[0] != '/' )
@@ -1314,11 +1309,6 @@ ar_symlink( const char *from, const char *to )
 	st.st_blocks = 0;
 	st.st_atime = st.st_ctime = st.st_mtime = time( NULL );
 	/* build entry */
-	if( (node->entry = archive_entry_new()) == NULL ) {
-		log( "Out of memory" );
-		pthread_mutex_unlock( &lock );
-		return -ENOMEM;
-	}
 	if( root->child &&
 			node->name[0] == '/' &&
 			archive_entry_pathname( root->child->entry )[0] != '/' )
@@ -1414,11 +1404,6 @@ ar_link( const char *from, const char *to )
 	node->name = strdup( to );
 	node->modified = 1;
 	/* build entry */
-	if( (node->entry = archive_entry_new()) == NULL ) {
-		log( "Out of memory" );
-		pthread_mutex_unlock( &lock );
-		return -ENOMEM;
-	}
 	if( node->name[0] == '/' &&
 			archive_entry_pathname( fromnode->entry )[0] != '/' )
 	{
@@ -1784,11 +1769,6 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 	node->modified = 1;
 	node->name = strdup( path );
 	/* build entry */
-	if( (node->entry = archive_entry_new()) == NULL) {
-		log( "Out of memory" );
-		pthread_mutex_unlock( &lock );
-		return -ENOMEM;
-	}
 	if( root->child &&
 			node->name[0] == '/' &&
 			archive_entry_pathname( root->child->entry )[0] != '/' )
@@ -2205,11 +2185,6 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 	node->modified = 1;
 	node->name = strdup( path );
 	/* build entry */
-	if( (node->entry = archive_entry_new()) == NULL ) {
-		log( "Out of memory" );
-		pthread_mutex_unlock( &lock );
-		return -ENOMEM;
-	}
 	if( root->child &&
 			node->name[0] == '/' &&
 			archive_entry_pathname( root->child->entry )[0] != '/' )
