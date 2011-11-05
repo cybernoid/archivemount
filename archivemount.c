@@ -204,6 +204,18 @@ init_node( )
 }
 
 static void
+free_node(NODE *node)
+{
+	free( node->name );
+
+	if (node->entry != null)
+		archive_entry_free(node->entry);
+
+	free(node);
+}
+
+
+static void
 remove_child( NODE *node )
 {
 	if( node->prev ) {
@@ -1188,9 +1200,7 @@ ar_mkdir( const char *path, mode_t mode )
 				strerror( 0 - tmp ) );
 		rmdir( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node(node);
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
@@ -1200,9 +1210,7 @@ ar_mkdir( const char *path, mode_t mode )
 				node->name );
 		rmdir( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node(node);
 		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
@@ -1255,8 +1263,7 @@ ar_rmdir( const char *path )
 		free( node->location );
 	}
 	remove_child( node );
-	free( node->name );
-	free( node );
+	free_node(node);
 	archiveModified = 1;
 	pthread_mutex_unlock( &lock );
 	return 0;
@@ -1328,9 +1335,7 @@ ar_symlink( const char *from, const char *to )
 				errno == ERANGE )
 		{
 			log( "ERROR calling getpwuid: %s", strerror( errno ) );
-			free( node->name );
-			archive_entry_free( node->entry );
-			free( node );
+			free_node(node);
 			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
@@ -1347,9 +1352,7 @@ ar_symlink( const char *from, const char *to )
 				errno == ERANGE )
 		{
 			log( "ERROR calling getgrgid: %s", strerror( errno ) );
-			free( node->name );
-			archive_entry_free( node->entry );
-			free( node );
+			free_node(node);
 			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
@@ -1360,9 +1363,7 @@ ar_symlink( const char *from, const char *to )
 	if( insert_by_path( root, node ) != 0 ) {
 		log( "ERROR: could not insert symlink %s into tree",
 				node->name );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
@@ -1433,9 +1434,7 @@ ar_link( const char *from, const char *to )
 				errno == ERANGE )
 		{
 			log( "ERROR calling getpwuid: %s", strerror( errno ) );
-			free( node->name );
-			archive_entry_free( node->entry );
-			free( node );
+			free_node( node );
 			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
@@ -1452,9 +1451,7 @@ ar_link( const char *from, const char *to )
 				errno == ERANGE )
 		{
 			log( "ERROR calling getgrgid: %s", strerror( errno ) );
-			free( node->name );
-			archive_entry_free( node->entry );
-			free( node );
+			free_node( node );
 			pthread_mutex_unlock( &lock );
 			return 0 - errno;
 		}
@@ -1465,9 +1462,7 @@ ar_link( const char *from, const char *to )
 	if( insert_by_path( root, node ) != 0 ) {
 		log( "ERROR: could not insert hardlink %s into tree",
 				node->name );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
@@ -1802,9 +1797,7 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 				strerror( 0 - tmp ) );
 		unlink( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
@@ -1814,9 +1807,7 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 				node->name );
 		unlink( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
@@ -1857,8 +1848,7 @@ ar_unlink( const char *path )
 		free( node->location );
 	}
 	remove_child( node );
-	free( node->name );
-	free( node );
+	free_node( node );
 	archiveModified = 1;
 	pthread_mutex_unlock( &lock );
 	return 0;
@@ -2228,9 +2218,7 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 				strerror( 0 - tmp ) );
 		unlink( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
@@ -2240,9 +2228,7 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 				node->name );
 		unlink( location );
 		free( location );
-		free( node->name );
-		archive_entry_free( node->entry );
-		free( node );
+		free_node( node );
 		pthread_mutex_unlock( &lock );
 		return -ENOENT;
 	}
