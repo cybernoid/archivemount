@@ -9,6 +9,7 @@
 
    Contributions by: Niels de Vos <niels@nixpanic.net>
                      Thomas J. Duck
+                     Andrew Brampton <me at bramp dot net>
 
 */
 
@@ -179,9 +180,16 @@ ar_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs)
 	}
 }
 
-static void
-init_node( NODE *node )
+static NODE *
+init_node( )
 {
+	NODE *node;
+
+	if( (node = malloc( sizeof( NODE ) ) ) == NULL ) {
+		log( "Out of memory" );
+		return NULL;
+	}
+
 	node->parent = NULL;
 	node->prev = NULL;
 	node->next = NULL;
@@ -191,6 +199,8 @@ init_node( NODE *node )
 	node->namechanged = 0;
 	node->entry = NULL;
 	node->modified = 0;
+
+	return node;
 }
 
 static void
@@ -262,11 +272,9 @@ insert_by_path( NODE *root, NODE *node )
 		if( ! cur ) {
 			/* parent path not found, create a temporary one */
 			NODE *tempnode;
-			if( ( tempnode = malloc( sizeof( NODE ) ) ) == NULL ) {
-				log( "Out of memory" );
+			if ( (tempnode = init_node()) == NULL )
 				return -ENOMEM;
-			}
-			init_node( tempnode );
+
 			if( ( tempnode->name = malloc(
 				strlen( last->name ) + namlen + 2 ) ) == NULL ) {
 				log( "Out of memory" );
@@ -358,11 +366,9 @@ build_tree( const char *mtpt )
 		archiveWriteable = 0;
 	}
 	/* create root node */
-	if( (root = malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if ( (root = init_node()) == NULL )
 		return -ENOMEM;
-	}
-	init_node( root );
+
 	root->name = strdup( "/" );
 	/* fill root->entry */
 	if( (root->entry = archive_entry_new()) == NULL ) {
@@ -1155,12 +1161,10 @@ ar_mkdir( const char *path, mode_t mode )
 		return 0 - errno;
 	}
 	/* build node */
-	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if( ( node = init_node() ) == NULL ) {
 		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
-	init_node( node );
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
@@ -1279,12 +1283,10 @@ ar_symlink( const char *from, const char *to )
 		return -EEXIST;
 	}
 	/* build node */
-	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if( ( node = init_node() ) == NULL ) {
 		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
-	init_node( node );
 	node->name = strdup( to );
 	node->modified = 1;
 	/* build stat info */
@@ -1399,12 +1401,10 @@ ar_link( const char *from, const char *to )
 	/* extract originals stat info */
 	_ar_getattr( from, &st );
 	/* build new node */
-	if( (node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if( (node = init_node() ) == NULL ) {
 		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
-	init_node( node );
 	node->name = strdup( to );
 	node->modified = 1;
 	/* build entry */
@@ -1776,12 +1776,10 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 		return 0 - errno;
 	}
 	/* build node */
-	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if( ( node = init_node() ) == NULL ) {
 		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
-	init_node( node );
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
@@ -2204,12 +2202,10 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 		return 0 - errno;
 	}
 	/* build node */
-	if( ( node = ( NODE * )malloc( sizeof( NODE ) ) ) == NULL ) {
-		log( "Out of memory" );
+	if( ( node = init_node() ) == NULL ) {
 		pthread_mutex_unlock( &lock );
 		return -ENOMEM;
 	}
-	init_node( node );
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
