@@ -345,10 +345,10 @@ static int
 build_tree( const char *mtpt )
 {
 	struct archive *archive;
-	struct archive_entry *entry;
 	struct stat st;
 	int format;
 	int compression;
+	NODE *cur;
 
 	/* open archive */
 	if( (archive = archive_read_new()) == NULL ) {
@@ -398,26 +398,22 @@ build_tree( const char *mtpt )
 	archive_entry_set_size( root->entry, st.st_size );
 	stat( mtpt, &st );
 	archive_entry_set_mode( root->entry, st.st_mode );
+
+	if( (cur = init_node() ) == NULL ) {
+		return -ENOMEM;
+	}
+	cur->entry = archive_entry_new();
+
 	/* read all entries in archive, create node for each */
-	while( archive_read_next_header( archive, &entry ) == ARCHIVE_OK ) {
-		NODE *cur;
+	while( archive_read_next_header2( archive, &cur->entry ) == ARCHIVE_OK ) {
 		const char *name;
 		/* find name of node */
-		name = archive_entry_pathname( entry );
+		name = archive_entry_pathname( cur->entry );
 		if( strncmp( name, "./\0", 3 ) == 0 ) {
 			/* special case: the directory "./" must be skipped! */
 			continue;
 		}
 		/* create node and clone the entry */
-		if( (cur = malloc( sizeof( NODE ) ) ) == NULL ) {
-			log( "Out of memory" );
-			return -ENOMEM;
-		}
-		init_node( cur );
-		if( (cur->entry = archive_entry_clone( entry )) == NULL ) {
-			log( "Out of memory" );
-			return -ENOMEM;
-		}
 		/* normalize the name to start with "/" */
 		if( strncmp( name, "./", 2 ) == 0 ) {
 			/* remove the "." of "./" */
@@ -443,8 +439,17 @@ build_tree( const char *mtpt )
 					cur->name );
 			return -ENOENT;
 		}
+
+		if( (cur = init_node() ) == NULL ) {
+			return -ENOMEM;
+		}
+		cur->entry = archive_entry_new();
+
 		archive_read_data_skip( archive );
 	}
+	/* free the last unused NODE */
+	free_node(cur);
+
 	/* close archive */
 	archive_read_finish( archive );
 	lseek( archiveFd, 0, SEEK_SET );
