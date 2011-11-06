@@ -74,6 +74,7 @@ typedef struct node {
 	struct node *child; /* first child for directories */
 	struct node *last_child; /* last child for directories */
 	char *name; /* fully qualified with prepended '/' */
+	char *basename; /* every after the last '/' */
 	char *location; /* location on disk for new/modified files, else NULL */
 	int namechanged; /* true when file was renamed */
 	struct archive_entry *entry; /* libarchive header data */
@@ -197,6 +198,7 @@ init_node( )
 	node->child = NULL;
 	node->last_child = NULL;
 	node->name = NULL;
+	node->basename = NULL;
 	node->location = NULL;
 	node->namechanged = 0;
 	node->entry = archive_entry_new();
@@ -278,10 +280,9 @@ insert_by_path( NODE *root, NODE *node )
 
 		strncpy( nam, key, namlen );
 		nam[namlen] = '\0';
-		if( strcmp( strrchr( cur->name, '/' ) + 1, nam ) != 0 ) {
+		if( strcmp( cur->basename, nam ) != 0 ) {
 			cur = cur->child;
-			while( cur && strcmp( strrchr( cur->name, '/' ) + 1,
-						nam ) != 0 )
+			while( cur && strcmp( cur->basename, nam ) != 0 )
 			{
 				cur = cur->next;
 			}
@@ -302,6 +303,7 @@ insert_by_path( NODE *root, NODE *node )
 			} else {
 				sprintf( tempnode->name, "/%s", nam );
 			}
+			tempnode->basename = strrchr( tempnode->name, '/' ) + 1;
 
 			archive_entry_free(tempnode->entry);
 
@@ -323,9 +325,7 @@ insert_by_path( NODE *root, NODE *node )
 		int found = 0;
 		tempnode = cur->child;
 		while( tempnode ) {
-			if( strcmp( strrchr( tempnode->name, '/' ) + 1,
-						strrchr( node->name, '/' ) + 1 )
-					== 0 )
+			if( strcmp( tempnode->basename, node->basename ) == 0 )
 			{
 				/* this is a dupe due to a temporarily inserted
 				   node, just update the entry */
@@ -390,6 +390,8 @@ build_tree( const char *mtpt )
 		return -ENOMEM;
 
 	root->name = strdup( "/" );
+	root->basename = &root->name[1];
+
 	/* fill root->entry */
 	if( fstat( archiveFd, &st ) != 0 ) {
 		perror( "Error stat'ing archiveFile" );
@@ -433,9 +435,12 @@ build_tree( const char *mtpt )
 			cur->name = strdup( name );
 		}
 		/* remove trailing '/' for directories */
-		if( cur->name[strlen(cur->name)-1] == '/' ) {
-			cur->name[strlen(cur->name)-1] = '\0';
+		int len = strlen(cur->name) - 1;
+		if( cur->name[len] == '/' ) {
+			cur->name[len] = '\0';
 		}
+		cur->basename = strrchr( cur->name, '/' ) + 1;
+
 		/* references */
 		if( insert_by_path( root, cur ) != 0 ) {
 			log( "ERROR: could not insert %s into tree",
@@ -589,6 +594,7 @@ rename_recursively( NODE *start, const char *from, const char *to )
 		correct_hardlinks_to_node( root, node->name, newName );
 		free( node->name );
 		node->name = newName;
+		node->basename = strrchr( node->name, '/' ) + 1;
 		node->namechanged = 1;
 		/* iterate */
 		node = node->next;
@@ -1187,6 +1193,7 @@ ar_mkdir( const char *path, mode_t mode )
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
+	node->basename = strrchr( node->name, '/' ) + 1;
 	node->namechanged = 0;
 	/* build entry */
 	if( root->child &&
@@ -1297,6 +1304,7 @@ ar_symlink( const char *from, const char *to )
 		return -ENOMEM;
 	}
 	node->name = strdup( to );
+	node->basename = strrchr( node->name, '/' ) + 1;
 	node->modified = 1;
 	/* build stat info */
 	st.st_dev = 0;
@@ -1404,6 +1412,7 @@ ar_link( const char *from, const char *to )
 		return -ENOMEM;
 	}
 	node->name = strdup( to );
+	node->basename = strrchr( node->name, '/' ) + 1;
 	node->modified = 1;
 	/* build entry */
 	if( node->name[0] == '/' &&
@@ -1770,6 +1779,8 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
+	node->basename = strrchr( node->name, '/' ) + 1;
+
 	/* build entry */
 	if( root->child &&
 			node->name[0] == '/' &&
@@ -1981,6 +1992,7 @@ ar_rename( const char *from, const char *to )
 	NODE *node;
 	int ret = 0;
 	char *old_name;
+	char *temp_name;
 
 	//log( "ar_rename called, from: '%s', to: '%s'", from, to );
 	if( ! archiveWriteable || options.readonly ) {
@@ -2000,25 +2012,22 @@ ar_rename( const char *from, const char *to )
 	/* meta data is changed in save() */
 	/* change node name */
 	if( *to != '/' ) {
-		char *temp_name;
 		if( ( temp_name = malloc( strlen( to ) + 2 ) ) == NULL ) {
 			log( "Out of memory" );
 			pthread_mutex_unlock( &lock );
 			return -ENOMEM;
 		}
 		sprintf( temp_name, "/%s", to );
-		old_name = node->name;
-		node->name = temp_name;
 	} else {
-		char *temp_name;
 		if( ( temp_name = strdup( to ) ) == NULL ) {
 			log( "Out of memory" );
 			pthread_mutex_unlock( &lock );
 			return -ENOMEM;
 		}
-		old_name = node->name;
-		node->name = temp_name;
 	}
+	old_name = node->name;
+	node->name = temp_name;
+	node->basename = strrchr( node->name, '/' ) + 1;
 	node->namechanged = 1;
 	remove_child( node );
 	ret = insert_by_path( root, node );
@@ -2186,6 +2195,8 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 	node->location = location;
 	node->modified = 1;
 	node->name = strdup( path );
+	node->basename = strrchr( node->name, '/' ) + 1;
+
 	/* build entry */
 	if( root->child &&
 			node->name[0] == '/' &&
