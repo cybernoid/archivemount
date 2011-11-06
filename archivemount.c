@@ -679,7 +679,7 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 		ssize_t len;
 		/* copy stat info */
 		if( lstat( node->location, &st ) != 0 ) {
-			log( "Could not lstat temporary file %s: ",
+			log( "Could not lstat temporary file %s: %s",
 					node->location,
 					strerror( errno ) );
 			return;
@@ -1838,8 +1838,8 @@ ar_unlink( const char *path )
 		/* remove temporary file */
 		if( unlink( node->location ) == -1 ) {
 			int err = errno;
-			log( "ERROR: could not unlink temporary file '%s'",
-					node->location, strerror( errno ) );
+			log( "ERROR: could not unlink temporary file '%s': %s",
+					node->location, strerror( err ) );
 			pthread_mutex_unlock( &lock );
 			return err;
 		}
