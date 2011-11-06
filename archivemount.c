@@ -72,6 +72,7 @@ typedef struct node {
 	struct node *prev; /* previous in same directory */
 	struct node *next; /* next in same directory */
 	struct node *child; /* first child for directories */
+	struct node *last_child; /* last child for directories */
 	char *name; /* fully qualified with prepended '/' */
 	char *location; /* location on disk for new/modified files, else NULL */
 	int namechanged; /* true when file was renamed */
@@ -194,6 +195,7 @@ init_node( )
 	node->prev = NULL;
 	node->next = NULL;
 	node->child = NULL;
+	node->last_child = NULL;
 	node->name = NULL;
 	node->location = NULL;
 	node->namechanged = 0;
@@ -225,6 +227,7 @@ remove_child( NODE *node )
 		node->prev->next = node->next;
 		//log( "removed '%s' from parent '%s' (prev was: '%s', next was '%s')", node->name, node->parent->name, node->prev->name, node->next?node->next->name:"NULL" );
 	} else {
+		// TODO Shouldn't we check if we are first child?
 		if( node->parent ) {
 			node->parent->child = node->next;
 			//log( "removed '%s' from parent '%s' (was first child, next was '%s')", node->name, node->parent->name, node->next?node->next->name:"NULL" );
@@ -241,17 +244,16 @@ insert_as_child( NODE *node, NODE *parent )
 	node->parent = parent;
 	if( ! parent->child ) {
 		parent->child = node;
+		parent->last_child = node;
 		node->prev = NULL;
 		node->next = NULL;
 	} else {
-		/* find last child of parent, insert node behind it */
-		NODE *b = parent->child;
-		while( b->next ) {
-			b = b->next;
-		}
+		/* insert node behind last child */
+		NODE *b = parent->last_child;
 		b->next = node;
 		node->prev = b;
 		node->next = NULL;
+		parent->last_child = node;
 	}
 	//log( "inserted '%s' as child of '%s', between '%s' and '%s'", node->name, parent->name, node->prev?node->prev->name:"NULL", node->next?node->next->name:"NULL" );
 }
