@@ -46,6 +46,8 @@
 #include <archive_entry.h>
 #include <pthread.h>
 
+#include "uthash.h"
+
   /**********/
  /* macros */
 /**********/
@@ -69,16 +71,14 @@
 
 typedef struct node {
 	struct node *parent;
-	struct node *prev; /* previous in same directory */
-	struct node *next; /* next in same directory */
 	struct node *child; /* first child for directories */
-	struct node *last_child; /* last child for directories */
 	char *name; /* fully qualified with prepended '/' */
 	char *basename; /* every after the last '/' */
 	char *location; /* location on disk for new/modified files, else NULL */
 	int namechanged; /* true when file was renamed */
 	struct archive_entry *entry; /* libarchive header data */
 	int modified; /* true when node was modified */
+	UT_hash_handle hh;
 } NODE;
 
 struct options {
@@ -122,6 +122,16 @@ char *mtpt = NULL;
 char *archiveFile = NULL;
 pthread_mutex_t lock; /* global node tree lock */
 
+/* Taken from the GNU under the GPL */
+char *
+strchrnul (const char *s, int c_in)
+{
+	char c = c_in;
+	while (*s && (*s != c))
+		s++;
+
+  return (char *) s;
+}
 
   /**********************/
  /* internal functions */
@@ -193,16 +203,14 @@ init_node( )
 	}
 
 	node->parent = NULL;
-	node->prev = NULL;
-	node->next = NULL;
 	node->child = NULL;
-	node->last_child = NULL;
 	node->name = NULL;
 	node->basename = NULL;
 	node->location = NULL;
 	node->namechanged = 0;
 	node->entry = archive_entry_new();
 	node->modified = 0;
+	memset(&node->hh, 0, sizeof(node->hh));
 
 	if ( node->entry == NULL ) {
 		log( "Out of memory" );
@@ -225,18 +233,11 @@ free_node(NODE *node)
 static void
 remove_child( NODE *node )
 {
-	if( node->prev ) {
-		node->prev->next = node->next;
-		//log( "removed '%s' from parent '%s' (prev was: '%s', next was '%s')", node->name, node->parent->name, node->prev->name, node->next?node->next->name:"NULL" );
+	if( node->parent ) {
+		HASH_DEL(node->parent->child, node);
+		//log( "removed '%s' from parent '%s' (was first child, next was '%s')", node->name, node->parent->name, node->next?node->next->name:"NULL" );
 	} else {
-		// TODO Shouldn't we check if we are first child?
-		if( node->parent ) {
-			node->parent->child = node->next;
-			//log( "removed '%s' from parent '%s' (was first child, next was '%s')", node->name, node->parent->name, node->next?node->next->name:"NULL" );
-		}
-	}
-	if( node->next ) {
-		node->next->prev = node->prev;
+		root = NULL;
 	}
 }
 
@@ -244,19 +245,7 @@ static void
 insert_as_child( NODE *node, NODE *parent )
 {
 	node->parent = parent;
-	if( ! parent->child ) {
-		parent->child = node;
-		parent->last_child = node;
-		node->prev = NULL;
-		node->next = NULL;
-	} else {
-		/* insert node behind last child */
-		NODE *b = parent->last_child;
-		b->next = node;
-		node->prev = b;
-		node->next = NULL;
-		parent->last_child = node;
-	}
+	HASH_ADD_KEYPTR( hh, parent->child, node->basename, strlen(node->basename), node );
 	//log( "inserted '%s' as child of '%s', between '%s' and '%s'", node->name, parent->name, node->prev?node->prev->name:"NULL", node->next?node->next->name:"NULL" );
 }
 
@@ -284,7 +273,7 @@ insert_by_path( NODE *root, NODE *node )
 			cur = cur->child;
 			while( cur && strcmp( cur->basename, nam ) != 0 )
 			{
-				cur = cur->next;
+				cur = cur->hh.next;
 			}
 		}
 		if( ! cur ) {
@@ -321,26 +310,20 @@ insert_by_path( NODE *root, NODE *node )
 	}
 	if( S_ISDIR( archive_entry_mode( cur->entry ) ) ) {
 		/* check if a child of this name already exists */
-		NODE *tempnode;
-		int found = 0;
-		tempnode = cur->child;
-		while( tempnode ) {
-			if( strcmp( tempnode->basename, node->basename ) == 0 )
-			{
-				/* this is a dupe due to a temporarily inserted
-				   node, just update the entry */
-				archive_entry_free( node->entry );
-				if( (node->entry = archive_entry_clone(
-						tempnode->entry )) == NULL) {
-					log( "Out of memory" );
-					return -ENOMEM;
-				}
-				found = 1;
-				break;
+		NODE *tempnode = NULL;
+
+		HASH_FIND(hh, cur->child, node->basename, strlen(node->basename), tempnode);
+
+		if (tempnode) {
+			/* this is a dupe due to a temporarily inserted
+			   node, just update the entry */
+			archive_entry_free( node->entry );
+			if( (node->entry = archive_entry_clone(
+					tempnode->entry )) == NULL) {
+				log( "Out of memory" );
+				return -ENOMEM;
 			}
-			tempnode = tempnode->next;
-		}
-		if( ! found ) {
+		} else {
 			insert_as_child( node, cur );
 		}
 	} else {
@@ -479,7 +462,7 @@ find_modified_node( NODE *start )
 				break;
 			}
 		}
-		run = run->next;
+		run = run->hh.next;
 	}
 	return ret;
 }
@@ -504,7 +487,7 @@ correct_hardlinks_to_node( const NODE *start, const char *old_name,
 		if( run->child ) {
 			correct_hardlinks_to_node( run->child, old_name, new_name );
 		}
-		run = run->next;
+		run = run->hh.next;
 	}
 }
 
@@ -512,24 +495,40 @@ static NODE *
 get_node_for_path( NODE *start, const char *path )
 {
 	NODE *ret = NULL;
-	NODE *run = start;
 
-	while( run ) {
-		if( strcmp( path, run->name ) == 0 ) {
-			ret = run;
-			break;
-		}
-		if( run->child && strncmp( path, run->name,
-					strlen( run->name ) ) == 0 )
-		{
-			if( ( ret = get_node_for_path( run->child, path ) ) ) {
-				break;
-			}
-		}
-		run = run->next;
+	//log( "get_node_for_path path: '%s' start: '%s'", path, start->name );
+
+	/* Check if start is a perfect match */
+	if( strcmp( path, start->name ) == 0 ) {
+		//log( "  get_node_for_path path: '%s' start: '%s' return: '%s'", path, start->name, start->name );
+		return start;
 	}
-	return ret;
+
+	/* Check if one of the children match */
+	if (start->child) {
+		const char * basename;
+		const char * baseend;
+
+		/* Find the part of the path we are now looking for */
+		basename = path + strlen(start->name);
+		if (*basename == '/')
+			basename++;
+
+		baseend = strchrnul(basename, '/');
+
+		//log( "get_node_for_path path: '%s' start: '%s' basename: '%s' len: %ld", path, start->name, basename, baseend - basename );
+
+		HASH_FIND(hh, start->child, basename, baseend - basename, ret);
+
+		if (ret) {
+			ret = get_node_for_path( ret, path );
+		}
+	}
+
+	//log( "  get_node_for_path path: '%s' start: '%s' return: '%s'", path, start->name, ret == NULL ? "(null)" : ret->name );
+    return ret;
 }
+
 
 static NODE *
 get_node_for_entry( NODE *start, struct archive_entry *entry )
@@ -556,7 +555,7 @@ get_node_for_entry( NODE *start, struct archive_entry *entry )
 				break;
 			}
 		}
-		run = run->next;
+		run = run->hh.next;
 	}
 	return ret;
 }
@@ -597,7 +596,7 @@ rename_recursively( NODE *start, const char *from, const char *to )
 		node->basename = strrchr( node->name, '/' ) + 1;
 		node->namechanged = 1;
 		/* iterate */
-		node = node->next;
+		node = node->hh.next;
 	}
 	return ret;
 }
@@ -2122,7 +2121,7 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) offset;
 	(void) fi;
 
-	//log( "readdir called, path: '%s'", path );
+	//log( "readdir called, path: '%s' offset: %d", path, offset );
 	int ret = -EIO;
 	if ( pthread_mutex_lock( &lock ) ) {
 		fprintf(stderr, "could not acquire lock for archive: %s\n", strerror(ret));
@@ -2139,19 +2138,20 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	filler( buf, "..", NULL, 0 );
 
 	node = node->child;
+
 	while( node ) {
 		struct stat st;
-		char *name;
 		st.st_ino = archive_entry_ino( node->entry );
 		st.st_mode = archive_entry_mode( node->entry );
-		name = strrchr( node->name, '/' ) + 1;
-		if( filler( buf, name, &st, 0 ) )
+		if( filler( buf, node->basename, &st, 0 ) )
 			break;
-		node = node->next;
+		node = node->hh.next;
 	}
+
 	pthread_mutex_unlock( &lock );
 	return 0;
 }
+
 
 static int
 ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
