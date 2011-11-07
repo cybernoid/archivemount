@@ -2150,11 +2150,11 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	node = node->child;
 
 	while( node ) {
-		struct stat st;
-		st.st_ino = archive_entry_ino( node->entry );
-		st.st_mode = archive_entry_mode( node->entry );
-		if( filler( buf, node->basename, &st, 0 ) )
+		const struct stat *st = archive_entry_stat( node->entry );
+
+		if( filler( buf, node->basename, st, 0 ) )
 			break;
+
 		node = node->hh.next;
 	}
 
