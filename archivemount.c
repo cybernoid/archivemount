@@ -1138,6 +1138,8 @@ _ar_getattr( const char *path, struct stat *stbuf )
 	}
 	memcpy( stbuf, archive_entry_stat( node->entry ),
 			sizeof( struct stat ) );
+	stbuf->st_blocks  = (stbuf->st_size + 511) / 512;
+	stbuf->st_blksize = 4096;
 
 	if( options.readonly ) {
 		stbuf->st_mode = stbuf->st_mode & 0777555;
@@ -2150,9 +2152,16 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	node = node->child;
 
 	while( node ) {
+		struct stat st_copy;
 		const struct stat *st = archive_entry_stat( node->entry );
 
-		if( filler( buf, node->basename, st, 0 ) )
+		/* Make a copy so we can set blocks/blksize. These are not
+		 * set by libarchive. Issue 191 */
+		memcpy(&st_copy, st, sizeof(st_copy));
+		st_copy.st_blocks  = (st_copy.st_size + 511) / 512;
+		st_copy.st_blksize = 4096;
+
+		if( filler( buf, node->basename, &st_copy, 0 ) )
 			break;
 
 		node = node->hh.next;
