@@ -224,8 +224,17 @@ init_node( )
 static void
 free_node(NODE *node)
 {
+	NODE *child, *tmp;
+
 	free( node->name );
 	archive_entry_free(node->entry);
+
+	// Clean up any children
+	HASH_ITER(hh, node->child, child, tmp) {
+		HASH_DEL(node->child, child);
+		free_node(child);
+	}
+
 	free(node);
 }
 
