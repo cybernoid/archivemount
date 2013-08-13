@@ -105,6 +105,9 @@ disable write support
 .TP
 \fB\-o\fR nobackup
 remove archive file backups
+.TP
+\fB\-o\fR subtree=<regex>
+mount only subtree of archive, strip subtree part from path
 
 .SS "FUSE mount options"
 

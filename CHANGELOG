@@ -1,3 +1,9 @@
+* 0.8.0 - contributions by Tomáš Čech <sleep_walker@suse.cz>:
+          * Allow mounting only subtree of archive, strip common part of
+            path in that case.
+* 0.7.0 - contributions by Andrew Brampton:
+          * simplifications in the code
+          * speedup by using hashes
 * 0.6.2 - contributions by Niels de Vos:
           * exchanged posix_rwlocks against mutexes to finally get rid of 
             the crashes
@@ -5,8 +11,8 @@
 * 0.6.1 - clarified licensing issue (thanks to Niels de Vos for pointing it out)
 * 0.6.0 - contributions by Thomas J. Duck:
           * autoconf/automake support
-	  * bug reports and fixes for mac-fuse
-	  many thanks for this!
+          * bug reports and fixes for mac-fuse
+          many thanks for this!
 * 0.5.3 - bugfix: copying a file into a mounted archive failed when target
           existed and was not modified before. Fixed that.
 * 0.5.2 - bugfix: fix for archives that contain files inside directories before

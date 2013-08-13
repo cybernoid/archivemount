@@ -45,6 +45,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <pthread.h>
+#include <regex.h>
 
 #include "uthash.h"
 
@@ -84,6 +85,7 @@ typedef struct node {
 struct options {
 	int readonly;
 	int nobackup;
+	char *subtree_filter;
 };
 
 enum
@@ -98,6 +100,7 @@ static struct fuse_opt ar_opts[] =
 {
 	AR_OPT("readonly", readonly, 1),
 	AR_OPT("nobackup", nobackup, 1),
+	AR_OPT("subtree=%s", subtree_filter, 1),
 
 	FUSE_OPT_KEY("-V",             KEY_VERSION),
 	FUSE_OPT_KEY("--version",      KEY_VERSION),
@@ -130,7 +133,7 @@ strchrnul (const char *s, int c_in)
 	while (*s && (*s != c))
 		s++;
 
-  return (char *) s;
+	return (char *) s;
 }
 
   /**********************/
@@ -151,6 +154,8 @@ usage( const char *progname )
 			"archivemount options:\n"
 			"    -o readonly            disable write support\n"
 			"    -o nobackup            remove archive file backups\n"
+			"    -o subtree=<regexp>    use only subtree matching ^\\.\\?<regexp> from archive\n"
+			"                           it implies readonly\n"
 			"\n",progname);
 }
 
@@ -243,8 +248,8 @@ static void
 remove_child( NODE *node )
 {
 	if( node->parent ) {
-		HASH_DEL(node->parent->child, node);
-		//log( "removed '%s' from parent '%s' (was first child, next was '%s')", node->name, node->parent->name, node->next?node->next->name:"NULL" );
+		HASH_DEL( node->parent->child, node );
+		//log( "removed '%s' from parent '%s' (was first child)", node->name, node->parent->name );
 	} else {
 		root = NULL;
 	}
@@ -255,7 +260,7 @@ insert_as_child( NODE *node, NODE *parent )
 {
 	node->parent = parent;
 	HASH_ADD_KEYPTR( hh, parent->child, node->basename, strlen(node->basename), node );
-	//log( "inserted '%s' as child of '%s', between '%s' and '%s'", node->name, parent->name, node->prev?node->prev->name:"NULL", node->next?node->next->name:"NULL" );
+	log( "inserted '%s' as child of '%s'", node->name, parent->name );
 }
 
 /*
@@ -349,7 +354,30 @@ build_tree( const char *mtpt )
 	int format;
 	int compression;
 	NODE *cur;
+	char *subtree_filter;
+	regex_t subtree;
+	int regex_error;
+	regmatch_t regmatch;
+	char error_buffer[256];
 
+#define PREFIX		"^\\.\\?"
+
+	if( options.subtree_filter ) {
+		subtree_filter = malloc(strlen(options.subtree_filter) + strlen(PREFIX) + 1);
+		if( !subtree_filter ) {
+			log( "Not enough memory" );
+			return -ENOMEM;
+		}
+		strcpy( subtree_filter, PREFIX );
+		subtree_filter = strcat( subtree_filter, options.subtree_filter );
+		regex_error = regcomp( &subtree, subtree_filter, 0 );
+		if ( regex_error ) {
+			regerror( regex_error, &subtree, error_buffer, 256 );
+			log( "Regex build error: %s\n", error_buffer );
+			return -regex_error;
+		}
+		options.readonly = 1;
+	}
 	/* open archive */
 	if( (archive = archive_read_new()) == NULL ) {
 		log( "Out of memory" );
@@ -404,11 +432,24 @@ build_tree( const char *mtpt )
 	/* read all entries in archive, create node for each */
 	while( archive_read_next_header2( archive, cur->entry ) == ARCHIVE_OK ) {
 		const char *name;
+		const char *new_name;
 		/* find name of node */
 		name = archive_entry_pathname( cur->entry );
-		if( strncmp( name, "./\0", 3 ) == 0 ) {
+		if( memcmp( name, "./\0", 3 ) == 0 ) {
 			/* special case: the directory "./" must be skipped! */
 			continue;
+		}
+		if ( options.subtree_filter ) {
+			regex_error = regexec( &subtree, name, 1, &regmatch, REG_NOTEOL );
+			if ( regex_error ) {
+				if ( regex_error == REG_NOMATCH )
+					continue;
+				regerror( regex_error, &subtree, error_buffer, 256 );
+				log( "Regex match error: %s\n", error_buffer );
+				return -regex_error;
+			}
+			/* strip subtree from name */
+			name += regmatch.rm_eo;
 		}
 		/* create node and clone the entry */
 		/* normalize the name to start with "/" */
@@ -426,18 +467,23 @@ build_tree( const char *mtpt )
 			/* just set the name */
 			cur->name = strdup( name );
 		}
-		/* remove trailing '/' for directories */
 		int len = strlen(cur->name) - 1;
-		if( cur->name[len] == '/' ) {
-			cur->name[len] = '\0';
-		}
-		cur->basename = strrchr( cur->name, '/' ) + 1;
+		if( 0 < len ) {
+			/* remove trailing '/' for directories */
+			if( cur->name[len] == '/' ) {
+				cur->name[len] = '\0';
+			}
+			cur->basename = strrchr( cur->name, '/' ) + 1;
 
-		/* references */
-		if( insert_by_path( root, cur ) != 0 ) {
-			log( "ERROR: could not insert %s into tree",
-					cur->name );
-			return -ENOENT;
+			/* references */
+			if( insert_by_path( root, cur ) != 0 ) {
+				log( "ERROR: could not insert %s into tree",
+						cur->name );
+				return -ENOENT;
+			}
+		} else {
+			/* this is the directory the subtree filter matches,
+			   do not respect it */
 		}
 
 		if( (cur = init_node() ) == NULL ) {
@@ -452,6 +498,10 @@ build_tree( const char *mtpt )
 	/* close archive */
 	archive_read_finish( archive );
 	lseek( archiveFd, 0, SEEK_SET );
+	if ( options.subtree_filter ) {
+		regfree( &subtree );
+		free( subtree_filter );
+	}
 	return 0;
 }
 
@@ -2133,10 +2183,10 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) offset;
 	(void) fi;
 
-	//log( "readdir called, path: '%s' offset: %d", path, offset );
+	log( "readdir called, path: '%s' offset: %d", path, offset );
 	int ret = -EIO;
 	if ( pthread_mutex_lock( &lock ) ) {
-		fprintf(stderr, "could not acquire lock for archive: %s\n", strerror(ret));
+		log( "could not acquire lock for archive: %s\n", strerror(ret));
 		return ret;
 	}
 	node = get_node_for_path( root, path );
@@ -2161,8 +2211,10 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 		st_copy.st_blocks  = (st_copy.st_size + 511) / 512;
 		st_copy.st_blksize = 4096;
 
-		if( filler( buf, node->basename, &st_copy, 0 ) )
-			break;
+		if( filler( buf, node->basename, &st_copy, 0 ) ) {
+			pthread_mutex_unlock( &lock );
+			return -ENOMEM;
+		}
 
 		node = node->hh.next;
 	}
@@ -2357,8 +2409,67 @@ main( int argc, char **argv )
 	/* Initialize the node tree lock */
 	pthread_mutex_init(&lock, NULL);
 
+#if FUSE_VERSION >= 26
+	{
+		struct fuse *fuse;
+		struct fuse_chan *ch;
+		char *mountpoint;
+		int multithreaded;
+		int foreground;
+		struct stat st;
+		int res;
+
+		res = fuse_parse_cmdline(&args, &mountpoint, &multithreaded,
+					 &foreground);
+		if (res == -1)
+			exit(1);
+
+		ch = fuse_mount(mountpoint, &args);
+		if (!ch)
+			exit(1);
+
+		res = fcntl(fuse_chan_fd(ch), F_SETFD, FD_CLOEXEC);
+		if (res == -1)
+			perror("WARNING: failed to set FD_CLOEXEC on fuse device");
+
+		fuse = fuse_new(ch, &args, &ar_oper,
+			sizeof(struct fuse_operations), NULL);
+		if (fuse == NULL) {
+			fuse_unmount(mountpoint, ch);
+			exit(1);
+		}
+
+		/* now do the real mount */
+		fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
+		res = fuse_daemonize(foreground);
+		if (res != -1)
+			res = fuse_set_signal_handlers(fuse_get_session(fuse));
+
+		if (res == -1) {
+			fuse_unmount(mountpoint, ch);
+			fuse_destroy(fuse);
+			exit(1);
+		}
+
+		if (multithreaded)
+			res = fuse_loop_mt(fuse);
+		else
+			res = fuse_loop(fuse);
+
+		if (res == -1)
+			res = 1;
+		else
+			res = 0;
+
+		fuse_remove_signal_handlers(fuse_get_session(fuse));
+		fuse_unmount(mountpoint, ch);
+		fuse_destroy(fuse);
+		free(mountpoint);
+	}
+#else
 	/* now do the real mount */
 	fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
+#endif
 
 	/* go back to saved dir */
 	fchdir( oldpwd );
@@ -2366,7 +2477,7 @@ main( int argc, char **argv )
 	/* save changes if modified */
 	if( archiveWriteable && !options.readonly && archiveModified ) {
 		if( save( archiveFile ) != 0 ) {
-			fprintf( stderr, "Saving new archive failed\n" );
+			log( "Saving new archive failed\n" );
 		}
 	}
 
