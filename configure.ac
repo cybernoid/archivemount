@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script
 
-AC_INIT([archivemount],[0.6.1], [andrel@cybernoia.de]) 
+AC_INIT([archivemount],[0.8.0], [andrel@cybernoia.de]) 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC 
 
@@ -8,7 +8,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile archivemount.1]) 
 
 
-RELEASE_DATE="1 November 2008"
+RELEASE_DATE="14 August 2013"
 AC_SUBST(RELEASE_DATE)
 
 CFLAGS=
@@ -35,6 +35,13 @@ AC_CHECK_HEADERS([archive.h archive_entry.h],,
     AC_MSG_ERROR([libarchive headers not found.  
 
                   If the libarchive headers are installed then perhaps you
+                  should set the CPPFLAGS=-I/nonstandard/include/dir 
+                  environment variable]))
+
+AC_CHECK_HEADERS([regex.h],,
+    AC_MSG_ERROR([regex.h not found.
+
+                  If the regex.h header file is installed then perhaps you
                   should set the CPPFLAGS=-I/nonstandard/include/dir 
                   environment variable]))
 
