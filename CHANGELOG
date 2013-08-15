@@ -1,3 +1,4 @@
+* 0.8.1 - added missing header file
 * 0.8.0 - contributions by Tomáš Čech <sleep_walker@suse.cz>:
           * Allow mounting only subtree of archive, strip common part of
             path in that case.
