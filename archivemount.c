@@ -85,6 +85,7 @@ typedef struct node {
 struct options {
 	int readonly;
 	int nobackup;
+	int nosave;
 	char *subtree_filter;
 };
 
@@ -100,6 +101,7 @@ static struct fuse_opt ar_opts[] =
 {
 	AR_OPT("readonly", readonly, 1),
 	AR_OPT("nobackup", nobackup, 1),
+	AR_OPT("nosave"  , nosave  , 1),
 	AR_OPT("subtree=%s", subtree_filter, 1),
 
 	FUSE_OPT_KEY("-V",             KEY_VERSION),
@@ -154,6 +156,12 @@ usage( const char *progname )
 			"archivemount options:\n"
 			"    -o readonly            disable write support\n"
 			"    -o nobackup            remove archive file backups\n"
+			"    -o nosave              do not save changes upon unmount.\n"
+			"                           Good if you want to change something\n"
+			"                           and save it as a diff,\n"
+			"                           or use a format for saving which is\n"
+			"                           not supported by archivemount.\n"
+			"\n"
 			"    -o subtree=<regexp>    use only subtree matching ^\\.\\?<regexp> from archive\n"
 			"                           it implies readonly\n"
 			"\n",progname);
@@ -2395,6 +2403,10 @@ main( int argc, char **argv )
 			close( archiveFd );
 		}
 	}
+	/* We want the temporary fuser version of the archive to be writable,*/
+	/* despite never actually writing the changes to disk.*/
+	if( options.nosave ) { archiveWriteable = 1; }
+
 	/* open archive and read meta data */
 	archiveFd = open( archiveFile, O_RDONLY );
 	if( archiveFd == -1 ) {
@@ -2475,7 +2487,7 @@ main( int argc, char **argv )
 	fchdir( oldpwd );
 
 	/* save changes if modified */
-	if( archiveWriteable && !options.readonly && archiveModified ) {
+	if( archiveWriteable && !options.readonly && archiveModified && !options.nosave ) {
 		if( save( archiveFile ) != 0 ) {
 			log( "Saving new archive failed\n" );
 		}
