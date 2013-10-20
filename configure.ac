@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script
 
-AC_INIT([archivemount],[0.8.1], [andrel@cybernoia.de]) 
+AC_INIT([archivemount],[0.8.2], [andrel@cybernoia.de]) 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC 
 
