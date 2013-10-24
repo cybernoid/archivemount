@@ -2421,6 +2421,11 @@ main( int argc, char **argv )
 	/* Initialize the node tree lock */
 	pthread_mutex_init(&lock, NULL);
 
+	/* always use fuse in single-threaded mode
+	 * multithreading is broken with libarchive :-(
+	 */
+	fuse_opt_add_arg( &args, "-s" );
+
 #if FUSE_VERSION >= 26
 	{
 		struct fuse *fuse;
@@ -2452,7 +2457,6 @@ main( int argc, char **argv )
 		}
 
 		/* now do the real mount */
-		fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
 		res = fuse_daemonize(foreground);
 		if (res != -1)
 			res = fuse_set_signal_handlers(fuse_get_session(fuse));

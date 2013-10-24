@@ -422,6 +422,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 This is beta software and should be treated as such.  Bug reports to the 
 AUTHORS listed below would be appreciated.
 
+archivemount is forced to run a single-thread mode for now. Support for
+stable multithreading is planned in a future release.
+
 
 .SH SEE ALSO
 
