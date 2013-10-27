@@ -1,7 +1,8 @@
 * 0.8.3 - do not call fuse_main anymore
         - force fuse into single-threaded mode due to libarchive not being
 	  thread-safe
-	Both patches contributed by Timothy Hobbs <timothyhobbs@seznam.cz>
+	Both patches contributed by Timothy Hobbs <timothyhobbs@seznam.cz>,
+	who found them in the Fedora RPM.
 * 0.8.2 - added nosave option, contributed by
           Timothy Hobbs <timothyhobbs@seznam.cz>
 * 0.8.1 - added missing header file
