@@ -87,6 +87,7 @@ struct options {
 	int nobackup;
 	int nosave;
 	char *subtree_filter;
+	int formatraw;
 };
 
 enum
@@ -103,6 +104,7 @@ static struct fuse_opt ar_opts[] =
 	AR_OPT("nobackup", nobackup, 1),
 	AR_OPT("nosave"  , nosave  , 1),
 	AR_OPT("subtree=%s", subtree_filter, 1),
+	AR_OPT("formatraw", formatraw, 1),
 
 	FUSE_OPT_KEY("-V",             KEY_VERSION),
 	FUSE_OPT_KEY("--version",      KEY_VERSION),
@@ -163,6 +165,9 @@ usage( const char *progname )
 			"                           not supported by archivemount.\n"
 			"\n"
 			"    -o subtree=<regexp>    use only subtree matching ^\\.\\?<regexp> from archive\n"
+			"                           it implies readonly\n"
+			"\n"
+			"    -o formatraw           treat input as a single element archive\n"
 			"                           it implies readonly\n"
 			"\n",progname);
 }
@@ -395,9 +400,17 @@ build_tree( const char *mtpt )
 		fprintf( stderr, "%s\n", archive_error_string( archive ) );
 		return archive_errno( archive );
 	}
-	if( archive_read_support_format_all( archive ) != ARCHIVE_OK ) {
-		fprintf( stderr, "%s\n", archive_error_string( archive ) );
-		return archive_errno( archive );
+	if ( options.formatraw ) {
+		if( archive_read_support_format_raw( archive ) != ARCHIVE_OK ) {
+			fprintf( stderr, "%s\n", archive_error_string( archive ) );
+			return archive_errno( archive );
+		}
+		options.readonly = 1;
+	} else {
+		if( archive_read_support_format_all( archive ) != ARCHIVE_OK ) {
+			fprintf( stderr, "%s\n", archive_error_string( archive ) );
+			return archive_errno( archive );
+		}
 	}
 	if( archive_read_open_fd( archive, archiveFd, 10240 ) != ARCHIVE_OK ) {
 		fprintf( stderr, "%s\n", archive_error_string( archive ) );
@@ -1095,11 +1108,21 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 				archive_error_string( archive ), archive_ret );
 			return -EIO;
 		}
-		archive_ret = archive_read_support_format_all( archive );
-		if( archive_ret != ARCHIVE_OK ) {
-			log( "archive_read_support_format_all(): %s (%d)\n",
-				archive_error_string( archive ), archive_ret );
-			return -EIO;
+		if ( options.formatraw ) {
+			archive_ret = archive_read_support_format_raw( archive );
+			if( archive_ret != ARCHIVE_OK ) {
+				log( "archive_read_support_format_all(): %s (%d)\n",
+					archive_error_string( archive ), archive_ret );
+				return -EIO;
+			}
+			options.readonly = 1;
+		} else {
+			archive_ret = archive_read_support_format_all( archive );
+			if( archive_ret != ARCHIVE_OK ) {
+				log( "archive_read_support_format_all(): %s (%d)\n",
+					archive_error_string( archive ), archive_ret );
+				return -EIO;
+			}
 		}
 		archive_ret = archive_read_open_fd( archive, archiveFd, 10240 );
 		if( archive_ret != ARCHIVE_OK ) {
@@ -1178,10 +1201,26 @@ ar_read( const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int
+_ar_getsizeraw(const char *path)
+{
+	size_t bufsize = 1024 * 1024;
+	char *buf = malloc(bufsize+1);
+	off_t offset = 0, ret;
+	for (;;) {
+		ret = _ar_read( path, buf, bufsize, offset, NULL );
+		if (ret <= 0)
+			break;
+		offset += ret;
+	}
+	return offset;
+}
+
+static int
 _ar_getattr( const char *path, struct stat *stbuf )
 {
 	NODE *node;
 	int ret;
+	int size;
 
 	//log( "getattr called, path: '%s'", path );
 	node = get_node_for_path( root, path );
@@ -1194,8 +1233,18 @@ _ar_getattr( const char *path, struct stat *stbuf )
 					node->entry ), stbuf );
 		return ret;
 	}
-	memcpy( stbuf, archive_entry_stat( node->entry ),
-			sizeof( struct stat ) );
+	if ( options.formatraw && ! node->child ) {
+		fstat( archiveFd, stbuf );
+		size = _ar_getsizeraw(path);
+		if (size < 0)
+			return -1;
+		stbuf->st_size = size;
+	} else {
+		memcpy( stbuf, archive_entry_stat( node->entry ),
+				sizeof( struct stat ) );
+		if ( options.formatraw && node->child )
+			stbuf->st_size = 4096;
+	}
 	stbuf->st_blocks  = (stbuf->st_size + 511) / 512;
 	stbuf->st_blksize = 4096;
 
@@ -2413,7 +2462,9 @@ main( int argc, char **argv )
 		perror( "opening archive failed" );
 		return EXIT_FAILURE;
 	}
-	build_tree( mtpt );
+	if ( build_tree( mtpt ) != 0 ) {
+		exit( EXIT_FAILURE );
+	}
 
 	/* save directory this was started from */
 	oldpwd = open( ".", 0 );
