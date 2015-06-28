@@ -8,9 +8,12 @@
    Based on: fusexmp.c and sshfs.c by Miklos Szeredi <miklos@szeredi.hu>
 
    Contributions by: Niels de Vos <niels@nixpanic.net>
-                     Thomas J. Duck
-                     Andrew Brampton <me at bramp dot net>
-
+		     Thomas J. Duck
+		     Andrew Brampton <me at bramp dot net>
+		     Tomáš Čech <sleep_walker at suse dot cz>
+		     Timothy Hobbs <timothyhobbs at seznam dot cz>
+		     Lee Leahu
+		     Alain Parmentier <pa at infodata.lu>
 */
 
 #ifdef linux
@@ -90,8 +93,14 @@ struct options {
 	int formatraw;
 };
 
-enum
-{
+typedef struct formatraw_cache {
+	struct stat st;
+	struct archive *archive;
+	int opened;
+	off_t offset_uncompressed;
+} FORMATRAW_CACHE;
+
+enum {
 	KEY_VERSION,
 	KEY_HELP,
 };
@@ -106,10 +115,10 @@ static struct fuse_opt ar_opts[] =
 	AR_OPT("subtree=%s", subtree_filter, 1),
 	AR_OPT("formatraw", formatraw, 1),
 
-	FUSE_OPT_KEY("-V",             KEY_VERSION),
+	FUSE_OPT_KEY("-V",	       KEY_VERSION),
 	FUSE_OPT_KEY("--version",      KEY_VERSION),
-	FUSE_OPT_KEY("-h",             KEY_HELP),
-	FUSE_OPT_KEY("--help",         KEY_HELP),
+	FUSE_OPT_KEY("-h",	       KEY_HELP),
+	FUSE_OPT_KEY("--help",	       KEY_HELP),
 	FUSE_OPT_END
 };
 
@@ -124,6 +133,7 @@ static int archiveFd; /* file descriptor of archive file, just to keep the
 static int archiveModified = 0;
 static int archiveWriteable = 0;
 static NODE *root;
+static FORMATRAW_CACHE *rawcache;
 struct options options;
 char *mtpt = NULL;
 char *archiveFile = NULL;
@@ -151,30 +161,30 @@ usage( const char *progname )
 			"usage: %s archivepath mountpoint [options]\n"
 			"\n"
 			"general options:\n"
-			"    -o opt,[opt...]        mount options\n"
-			"    -h   --help            print help\n"
-			"    -V   --version         print version\n"
+			"    -o opt,[opt...]	    mount options\n"
+			"    -h   --help	    print help\n"
+			"    -V   --version	    print version\n"
 			"\n"
 			"archivemount options:\n"
-			"    -o readonly            disable write support\n"
-			"    -o nobackup            remove archive file backups\n"
-			"    -o nosave              do not save changes upon unmount.\n"
-			"                           Good if you want to change something\n"
-			"                           and save it as a diff,\n"
-			"                           or use a format for saving which is\n"
-			"                           not supported by archivemount.\n"
+			"    -o readonly	    disable write support\n"
+			"    -o nobackup	    remove archive file backups\n"
+			"    -o nosave		    do not save changes upon unmount.\n"
+			"			    Good if you want to change something\n"
+			"			    and save it as a diff,\n"
+			"			    or use a format for saving which is\n"
+			"			    not supported by archivemount.\n"
 			"\n"
 			"    -o subtree=<regexp>    use only subtree matching ^\\.\\?<regexp> from archive\n"
-			"                           it implies readonly\n"
+			"			    it implies readonly\n"
 			"\n"
-			"    -o formatraw           treat input as a single element archive\n"
-			"                           it implies readonly\n"
+			"    -o formatraw	    treat input as a single element archive\n"
+			"			    it implies readonly\n"
 			"\n",progname);
 }
 
 static struct fuse_operations ar_oper;
 
-static int 
+static int
 ar_opt_proc(void *data, const char *arg, int key, struct fuse_args *outargs)
 {
 	(void) data;
@@ -239,6 +249,23 @@ init_node( )
 	return node;
 }
 
+static FORMATRAW_CACHE *
+init_rawcache( )
+{
+	FORMATRAW_CACHE *rawcache;
+
+	if( (rawcache = malloc( sizeof( FORMATRAW_CACHE ) ) ) == NULL ) {
+		log( "Out of memory" );
+		return NULL;
+	}
+
+	memset(&rawcache->st, 0, sizeof(rawcache->st));
+	memset(&rawcache->archive, 0, sizeof(rawcache->archive));
+	rawcache->opened=0;
+	rawcache->offset_uncompressed=0;
+	return rawcache;
+}
+
 static void
 free_node(NODE *node)
 {
@@ -254,6 +281,12 @@ free_node(NODE *node)
 	}
 
 	free(node);
+}
+
+static void
+free_rawcache(FORMATRAW_CACHE *rawcache)
+{
+	free(rawcache);
 }
 
 
@@ -396,7 +429,7 @@ build_tree( const char *mtpt )
 		log( "Out of memory" );
 		return -ENOMEM;
 	}
-	if( archive_read_support_compression_all( archive ) != ARCHIVE_OK ) {
+	if( archive_read_support_filter_all( archive ) != ARCHIVE_OK ) {
 		fprintf( stderr, "%s\n", archive_error_string( archive ) );
 		return archive_errno( archive );
 	}
@@ -418,7 +451,9 @@ build_tree( const char *mtpt )
 	}
 	/* check if format or compression prohibits writability */
 	format = archive_format( archive );
-	compression = archive_compression( archive );
+//	log("FORMAT=%s",archive_format_name(archive));
+	compression = archive_filter_code( archive, 0 );
+//	log("COMPRESSION=%s",archive_compression_name(archive));
 	if( format & ARCHIVE_FORMAT_ISO9660
 			|| format & ARCHIVE_FORMAT_ISO9660_ROCKRIDGE
 			|| format & ARCHIVE_FORMAT_ZIP
@@ -517,7 +552,7 @@ build_tree( const char *mtpt )
 	free_node(cur);
 
 	/* close archive */
-	archive_read_finish( archive );
+	archive_read_free( archive );
 	lseek( archiveFd, 0, SEEK_SET );
 	if ( options.subtree_filter ) {
 		regfree( &subtree );
@@ -579,7 +614,7 @@ get_node_for_path( NODE *start, const char *path )
 	//log( "get_node_for_path path: '%s' start: '%s'", path, start->name );
 
 	/* Check if start is a perfect match */
-	if( strcmp( path, start->name ) == 0 ) {
+	if( strcmp( path, start->name + (*path=='/'?0:1) ) == 0 ) {
 		//log( "  get_node_for_path path: '%s' start: '%s' return: '%s'", path, start->name, start->name );
 		return start;
 	}
@@ -590,7 +625,7 @@ get_node_for_path( NODE *start, const char *path )
 		const char * baseend;
 
 		/* Find the part of the path we are now looking for */
-		basename = path + strlen(start->name);
+		basename = path + strlen(start->name) - (*path=='/'?0:1);
 		if (*basename == '/')
 			basename++;
 
@@ -606,7 +641,7 @@ get_node_for_path( NODE *start, const char *path )
 	}
 
 	//log( "  get_node_for_path path: '%s' start: '%s' return: '%s'", path, start->name, ret == NULL ? "(null)" : ret->name );
-    return ret;
+	return ret;
 }
 
 
@@ -862,7 +897,7 @@ save( const char *archiveFile )
 		log( "Out of memory" );
 		return -ENOMEM;
 	}
-	if( archive_read_support_compression_all( oldarc ) != ARCHIVE_OK ) {
+	if( archive_read_support_filter_all( oldarc ) != ARCHIVE_OK ) {
 		log( "%s", archive_error_string( oldarc ) );
 		return archive_errno( oldarc );
 	}
@@ -875,7 +910,7 @@ save( const char *archiveFile )
 		return archive_errno( oldarc );
 	}
 	format = archive_format( oldarc );
-	compression = archive_compression( oldarc );
+	compression = archive_filter_code( oldarc, 0 );
 	/*
 	log( "format of old archive is %s (%d)",
 			archive_format_name( oldarc ),
@@ -891,15 +926,15 @@ save( const char *archiveFile )
 	}
 	switch( compression ) {
 		case ARCHIVE_COMPRESSION_GZIP:
-			archive_write_set_compression_gzip( newarc );
+			archive_write_add_filter_gzip( newarc );
 			break;
 		case ARCHIVE_COMPRESSION_BZIP2:
-			archive_write_set_compression_bzip2( newarc );
+			archive_write_add_filter_bzip2( newarc );
 			break;
 		case ARCHIVE_COMPRESSION_COMPRESS:
 		case ARCHIVE_COMPRESSION_NONE:
 		default:
-			archive_write_set_compression_none( newarc );
+			archive_write_add_filter_none( newarc );
 			break;
 	}
 #if 0
@@ -1028,8 +1063,8 @@ save( const char *archiveFile )
 		write_new_modded_file( node, node->entry, newarc );
 	}
 	/* clean up, re-open the new archive for reading */
-	archive_read_finish( oldarc );
-	archive_write_finish( newarc );
+	archive_read_free( oldarc );
+	archive_write_free( newarc );
 	close( tempfile );
 	close( archiveFd );
 	archiveFd = open( archiveFile, O_RDONLY );
@@ -1049,7 +1084,81 @@ save( const char *archiveFile )
 /*****************/
 
 static int
-_ar_read( const char *path, char *buf, size_t size, off_t offset,
+_ar_open_raw( void )
+//_ar_open_raw( const char *path, struct fuse_file_info *fi )
+{
+	// open archive and search first entry
+
+	const char path[] = "/data";
+
+	int ret = -1;
+	const char *realpath;
+	NODE *node;
+	//	log( "_ar_open_raw called, path: '%s'", path);
+
+
+	if(rawcache->opened!=0) {
+		//		log("already opened");
+		return 0;
+	}
+
+	options.readonly = 1;
+
+	/* find node */
+
+	node = get_node_for_path( root, path );
+	if( ! node ) {
+		log("get_node_for_path error");
+		return -ENOENT;
+	}
+
+	//	struct archive *archive;
+	struct archive_entry *entry;
+	int archive_ret;
+	/* search file in archive */
+	realpath = archive_entry_pathname( node->entry );
+	if( (rawcache->archive = archive_read_new()) == NULL ) {
+		log( "Out of memory" );
+		return -ENOMEM;
+	}
+	archive_ret = archive_read_support_filter_all( rawcache->archive );
+	if( archive_ret != ARCHIVE_OK ) {
+		log( "archive_read_support_filter_all(): %s (%d)\n",
+			archive_error_string( rawcache->archive ), archive_ret );
+		return -EIO;
+	}
+
+	archive_ret = archive_read_support_format_raw( rawcache->archive );
+	if( archive_ret != ARCHIVE_OK ) {
+		log( "archive_read_support_format_raw(): %s (%d)\n",
+			archive_error_string( rawcache->archive ), archive_ret );
+		return -EIO;
+	}
+
+	archive_ret = archive_read_open_fd( rawcache->archive, archiveFd, 10240 );
+	if( archive_ret != ARCHIVE_OK ) {
+		log( "archive_read_open_fd(): %s (%d)\n",
+			archive_error_string( rawcache->archive ), archive_ret );
+		return -EIO;
+	}
+	/* search for file to read - "/data" must be the first entry */
+	while( ( archive_ret = archive_read_next_header(
+				rawcache->archive, &entry )) == ARCHIVE_OK ) {
+		const char *name;
+		name = archive_entry_pathname( entry );
+		if( strcmp( realpath, name ) == 0 ) {
+			break;
+		}
+
+	}
+	rawcache->opened=1;
+	rawcache->offset_uncompressed=0;
+
+	return ret;
+}
+
+static int
+_ar_read_raw( const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi )
 {
 	int ret = -1;
@@ -1057,6 +1166,81 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 	NODE *node;
 	( void )fi;
 
+	//log( "read called, path: '%s'", path );
+	/* find node */
+	node = get_node_for_path( root, path );
+	if( ! node ) {
+		return -ENOENT;
+	}
+
+    if ( offset < rawcache->offset_uncompressed ) {
+		//rewind archive
+
+		/* close archive */
+		archive_read_free( rawcache->archive );
+		lseek( archiveFd, 0, SEEK_SET );
+
+		rawcache->opened=0;
+
+	/* reopen */
+	_ar_open_raw();
+	    }
+
+	void *trash;
+	if( ( trash = malloc( MAXBUF ) ) == NULL ) {
+		log( "Out of memory" );
+		return -ENOMEM;
+		}
+	/* skip offset */
+	offset-=rawcache->offset_uncompressed;
+
+	while( offset > 0 ) {
+		int skip = offset > MAXBUF ? MAXBUF : offset;
+		ret = archive_read_data(
+			rawcache->archive, trash, skip );
+		if( ret == ARCHIVE_FATAL
+			|| ret == ARCHIVE_WARN
+			|| ret == ARCHIVE_RETRY )
+			{
+			log( "ar_read_raw (skipping offset): %s",
+				archive_error_string( rawcache->archive ) );
+				errno = archive_errno( rawcache->archive );
+				ret = -1;
+				break;
+			}
+		rawcache->offset_uncompressed+=skip;
+		offset -= skip;
+		}
+	free( trash );
+
+	if( offset ) {
+		/* there was an error */
+	log("ar_read_raw (offset!=0)");
+	return -EIO;
+		}
+	/* read data */
+	ret = archive_read_data( rawcache->archive, buf, size );
+	if( ret == ARCHIVE_FATAL
+		|| ret == ARCHIVE_WARN
+		|| ret == ARCHIVE_RETRY )
+		{
+		log( "ar_read_raw (reading data): %s",
+			archive_error_string( rawcache->archive ) );
+			errno = archive_errno( rawcache->archive );
+			ret = -1;
+		}
+	rawcache->offset_uncompressed +=size;
+	return ret;
+}
+
+static int
+_ar_read( const char *path, char *buf, size_t size, off_t offset,
+		struct fuse_file_info *fi )
+{
+	int ret = -1;
+	const char *realpath;
+	NODE *node;
+	( void )fi;
 	//log( "read called, path: '%s'", path );
 	/* find node */
 	node = get_node_for_path( root, path );
@@ -1102,9 +1286,9 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 			log( "Out of memory" );
 			return -ENOMEM;
 		}
-		archive_ret = archive_read_support_compression_all( archive );
+		archive_ret = archive_read_support_filter_all( archive );
 		if( archive_ret != ARCHIVE_OK ) {
-			log( "archive_read_support_compression_all(): %s (%d)\n",
+			log( "archive_read_support_filter_all(): %s (%d)\n",
 				archive_error_string( archive ), archive_ret );
 			return -EIO;
 		}
@@ -1131,7 +1315,7 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 			return -EIO;
 		}
 		/* search for file to read */
-		while( ( archive_ret = archive_read_next_header( 
+		while( ( archive_ret = archive_read_next_header(
 					archive, &entry )) == ARCHIVE_OK ) {
 			const char *name;
 			name = archive_entry_pathname( entry );
@@ -1179,7 +1363,7 @@ _ar_read( const char *path, char *buf, size_t size, off_t offset,
 			archive_read_data_skip( archive );
 		}
 		/* close archive */
-		archive_read_finish( archive );
+		archive_read_free( archive );
 		lseek( archiveFd, 0, SEEK_SET );
 	}
 	return ret;
@@ -1194,24 +1378,109 @@ ar_read( const char *path, char *buf, size_t size, off_t offset,
 		log( "failed to get lock: %s\n", strerror(ret));
 		return -EIO;
 	} else {
-		ret = _ar_read( path, buf, size, offset, fi );
+		if ( options.formatraw) {
+			ret = _ar_read_raw( path, buf, size, offset, fi );
+		} else	{
+			ret = _ar_read( path, buf, size, offset, fi );
+		}
 		pthread_mutex_unlock(&lock);
 	}
 	return ret;
 }
 
-static int
+static off_t
 _ar_getsizeraw(const char *path)
 {
 	size_t bufsize = 1024 * 1024;
 	char *buf = malloc(bufsize+1);
 	off_t offset = 0, ret;
-	for (;;) {
-		ret = _ar_read( path, buf, bufsize, offset, NULL );
-		if (ret <= 0)
-			break;
-		offset += ret;
+	NODE *node;
+	const char *realpath;
+
+	/* find node */
+	node = get_node_for_path( root, path );
+	if( ! node ) {
+		return -ENOENT;
 	}
+
+	struct archive *archive;
+	struct archive_entry *entry;
+	int archive_ret;
+	/* search file in archive */
+	realpath = archive_entry_pathname( node->entry );
+
+	if( (archive = archive_read_new()) == NULL ) {
+		log( "Out of memory" );
+		return -ENOMEM;
+	}
+
+	archive_ret = archive_read_support_filter_all( archive );
+
+	if( archive_ret != ARCHIVE_OK ) {
+		log( "archive_read_support_filter_all(): %s (%d)\n",
+			archive_error_string( archive ), archive_ret );
+		return -EIO;
+	}
+
+	if ( options.formatraw ) {
+		archive_ret = archive_read_support_format_raw( archive );
+		if( archive_ret != ARCHIVE_OK ) {
+			log( "archive_read_support_format_raw(): %s (%d)\n",
+				archive_error_string( archive ), archive_ret );
+			return -EIO;
+		}
+		options.readonly = 1;
+		options.formatraw = 1;
+	}
+
+	archive_ret = archive_read_open_fd( archive, archiveFd, 10240 );
+	if( archive_ret != ARCHIVE_OK ) {
+		log( "archive_read_open_fd(): %s (%d)\n",
+			archive_error_string( archive ), archive_ret );
+		return -EIO;
+	}
+
+	/* search for file to read */
+	while( ( archive_ret = archive_read_next_header(
+				archive, &entry )) == ARCHIVE_OK )
+	{
+		const char *name;
+		name = archive_entry_pathname( entry );
+		if( strcmp( realpath, name ) == 0 ) {
+			void *trash;
+			if( ( trash = malloc( MAXBUF ) ) == NULL ) {
+				log( "Out of memory" );
+				return -ENOMEM;
+			}
+			/* read until no more data */
+			ssize_t readed=MAXBUF;
+			while( readed != 0 ) {
+				ret = archive_read_data(
+					archive, trash, MAXBUF );
+				readed=ret;
+
+				if( ret == ARCHIVE_FATAL
+					|| ret == ARCHIVE_WARN
+					|| ret == ARCHIVE_RETRY )
+				{
+					log( "ar_read (skipping offset): %s",
+						archive_error_string( archive ) );
+					errno = archive_errno( archive );
+					ret = -1;
+					break;
+				}
+				offset += ret;
+				// log("tmp offset =%ld (%ld)",offset,offset/1024/1024);
+			}
+			free( trash );
+			break;
+		}
+		archive_read_data_skip( archive );
+	} // end of search for file to read
+	/* close archive */
+	archive_read_free( archive );
+	lseek( archiveFd, 0, SEEK_SET );
+
 	return offset;
 }
 
@@ -1220,7 +1489,7 @@ _ar_getattr( const char *path, struct stat *stbuf )
 {
 	NODE *node;
 	int ret;
-	int size;
+	off_t size;
 
 	//log( "getattr called, path: '%s'", path );
 	node = get_node_for_path( root, path );
@@ -1235,9 +1504,8 @@ _ar_getattr( const char *path, struct stat *stbuf )
 	}
 	if ( options.formatraw && ! node->child ) {
 		fstat( archiveFd, stbuf );
-		size = _ar_getsizeraw(path);
-		if (size < 0)
-			return -1;
+		size=rawcache->st.st_size;
+		if( size < 0 ) return -1;
 		stbuf->st_size = size;
 	} else {
 		memcpy( stbuf, archive_entry_stat( node->entry ),
@@ -1453,7 +1721,7 @@ ar_symlink( const char *from, const char *to )
 		/* a name was found for the uid */
 		archive_entry_set_uname( node->entry, strdup( pwd->pw_name ) );
 	} else {
-		if( errno == EINTR || errno == EIO || errno == EMFILE || 
+		if( errno == EINTR || errno == EIO || errno == EMFILE ||
 				errno == ENFILE || errno == ENOMEM ||
 				errno == ERANGE )
 		{
@@ -1470,7 +1738,7 @@ ar_symlink( const char *from, const char *to )
 		/* a name was found for the uid */
 		archive_entry_set_gname( node->entry, strdup( grp->gr_name ) );
 	} else {
-		if( errno == EINTR || errno == EIO || errno == EMFILE || 
+		if( errno == EINTR || errno == EIO || errno == EMFILE ||
 				errno == ENFILE || errno == ENOMEM ||
 				errno == ERANGE )
 		{
@@ -1548,7 +1816,7 @@ ar_link( const char *from, const char *to )
 		/* a name was found for the uid */
 		archive_entry_set_uname( node->entry, strdup( pwd->pw_name ) );
 	} else {
-		if( errno == EINTR || errno == EIO || errno == EMFILE || 
+		if( errno == EINTR || errno == EIO || errno == EMFILE ||
 				errno == ENFILE || errno == ENOMEM ||
 				errno == ERANGE )
 		{
@@ -1565,7 +1833,7 @@ ar_link( const char *from, const char *to )
 		/* a name was found for the uid */
 		archive_entry_set_gname( node->entry, strdup( grp->gr_name ) );
 	} else {
-		if( errno == EINTR || errno == EIO || errno == EMFILE || 
+		if( errno == EINTR || errno == EIO || errno == EMFILE ||
 				errno == ENFILE || errno == ENOMEM ||
 				errno == ERANGE )
 		{
@@ -2085,7 +2353,7 @@ ar_utime( const char *path, struct utimbuf *buf )
 static int
 ar_statfs( const char *path, struct statvfs *stbuf )
 {
-  	( void )path;
+	( void )path;
 
 	//log( "statfs called, %s", path );
 
@@ -2191,7 +2459,7 @@ ar_readlink( const char *path, char *buf, size_t size )
 	tmp = archive_entry_symlink( node->entry );
 	snprintf( buf, size, "%s", tmp );
 	pthread_mutex_unlock( &lock );
-	
+
 	return 0;
 }
 
@@ -2220,6 +2488,8 @@ ar_open( const char *path, struct fuse_file_info *fi )
 	/* no need to recurse into links since function doesn't do anything */
 	/* no need to save a handle here since archives are stream based */
 	fi->fh = 0;
+	if(options.formatraw)
+	  _ar_open_raw();
 	pthread_mutex_unlock( &lock );
 	return 0;
 }
@@ -2240,7 +2510,7 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	(void) offset;
 	(void) fi;
 
-	log( "readdir called, path: '%s' offset: %d", path, offset );
+	//log( "readdir called, path: '%s' offset: %d", path, offset );
 	int ret = -EIO;
 	if ( pthread_mutex_lock( &lock ) ) {
 		log( "could not acquire lock for archive: %s\n", strerror(ret));
@@ -2259,9 +2529,19 @@ ar_readdir( const char *path, void *buf, fuse_fill_dir_t filler,
 	node = node->child;
 
 	while( node ) {
+		const struct stat *st;
 		struct stat st_copy;
-		const struct stat *st = archive_entry_stat( node->entry );
-
+		if( archive_entry_hardlink( node->entry ) ) {
+			/* file is a hardlink, stat'ing it somehow does not
+			 * work; stat the original instead */
+			NODE *orig = get_node_for_path( root, archive_entry_hardlink( node->entry ) );
+			if( ! orig ) {
+				return -ENOENT;
+			}
+			st = archive_entry_stat( orig->entry );
+		} else {
+			st = archive_entry_stat( node->entry );
+		}
 		/* Make a copy so we can set blocks/blksize. These are not
 		 * set by libarchive. Issue 191 */
 		memcpy(&st_copy, st, sizeof(st_copy));
@@ -2377,7 +2657,7 @@ static struct fuse_operations ar_oper = {
 	.read		= ar_read,
 	.write		= ar_write,
 	.statfs		= ar_statfs,
-	//.flush          = ar_flush,  // int(*flush )(const char *, struct fuse_file_info *)
+	//.flush	  = ar_flush,  // int(*flush )(const char *, struct fuse_file_info *)
 	.release	= ar_release,
 	.fsync		= ar_fsync,
 /*
@@ -2388,26 +2668,26 @@ static struct fuse_operations ar_oper = {
 	.removexattr	= ar_removexattr,
 #endif
 */
-	//.opendir        = ar_opendir,    // int(*opendir )(const char *, struct fuse_file_info *)
+	//.opendir	  = ar_opendir,    // int(*opendir )(const char *, struct fuse_file_info *)
 	.readdir	= ar_readdir,
-	//.releasedir     = ar_releasedir, // int(*releasedir )(const char *, struct fuse_file_info *)
-	//.fsyncdir       = ar_fsyncdir,   // int(*fsyncdir )(const char *, int, struct fuse_file_info *)
-	//.init           = ar_init,       // void *(*init )(struct fuse_conn_info *conn)
-	//.destroy        = ar_destroy,    // void(*destroy )(void *)
-	//.access         = ar_access,     // int(*access )(const char *, int)
-	.create         = ar_create,
-	//.ftruncate      = ar_ftruncate,  // int(*ftruncate )(const char *, off_t, struct fuse_file_info *)
-	//.fgetattr       = ar_fgetattr,   // int(*fgetattr )(const char *, struct stat *, struct fuse_file_info *)
-	//.lock           = ar_lock,       // int(*lock )(const char *, struct fuse_file_info *, int cmd, struct flock *)
-	//.utimens        = ar_utimens,    // int(*utimens )(const char *, const struct timespec tv[2])
-	//.bmap           = ar_bmap,       // int(*bmap )(const char *, size_t blocksize, uint64_t *idx)
+	//.releasedir	  = ar_releasedir, // int(*releasedir )(const char *, struct fuse_file_info *)
+	//.fsyncdir	  = ar_fsyncdir,   // int(*fsyncdir )(const char *, int, struct fuse_file_info *)
+	//.init		  = ar_init,	   // void *(*init )(struct fuse_conn_info *conn)
+	//.destroy	  = ar_destroy,    // void(*destroy )(void *)
+	//.access	  = ar_access,	   // int(*access )(const char *, int)
+	.create		= ar_create,
+	//.ftruncate	  = ar_ftruncate,  // int(*ftruncate )(const char *, off_t, struct fuse_file_info *)
+	//.fgetattr	  = ar_fgetattr,   // int(*fgetattr )(const char *, struct stat *, struct fuse_file_info *)
+	//.lock		  = ar_lock,	   // int(*lock )(const char *, struct fuse_file_info *, int cmd, struct flock *)
+	//.utimens	  = ar_utimens,    // int(*utimens )(const char *, const struct timespec tv[2])
+	//.bmap		  = ar_bmap,	   // int(*bmap )(const char *, size_t blocksize, uint64_t *idx)
 };
 
 void
 showUsage()
 {
 	fprintf( stderr, "Usage: archivemount <fuse-options> <archive> <mountpoint>\n" );
-	fprintf( stderr, "Usage:              (-v|--version)\n" );
+	fprintf( stderr, "Usage:	      (-v|--version)\n" );
 }
 
 int
@@ -2464,6 +2744,15 @@ main( int argc, char **argv )
 	}
 	if ( build_tree( mtpt ) != 0 ) {
 		exit( EXIT_FAILURE );
+	}
+
+	if(options.formatraw) {
+		/* create rawcache */
+		if ( (rawcache=init_rawcache()) == NULL )
+			return -ENOMEM;
+		fprintf(stderr,"Calculating uncompressed file size. Please wait.\n");
+		rawcache->st.st_size=_ar_getsizeraw("/data");
+		//log("cache st_size = %ld",rawcache->st.st_size);
 	}
 
 	/* save directory this was started from */

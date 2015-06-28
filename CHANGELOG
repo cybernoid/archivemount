@@ -1,3 +1,7 @@
+* 0.8.5 - fixed stat'ing of hardlinks in ar_readdir
+        - contributions by Alain Parmentier:
+          * FormatRaw optimization
+          * bugfix : use of off_t to support 64bits
 * 0.8.4 - added option -o formatraw for readonly support of the FormatRaw
           archive files supported by libarchive (kudos to Lee Leahu)
         - bugfix: do not do the fuse mount when the archive cannot be read
