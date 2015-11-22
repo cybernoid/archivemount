@@ -27,6 +27,7 @@
 #include "config.h"
 
 #include <fuse.h>
+#include <fuse/fuse_lowlevel.h>
 #include <fuse_opt.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,8 @@
 #include <archive_entry.h>
 #include <pthread.h>
 #include <regex.h>
+
+#include "archivecomp.h"
 
 #include "uthash.h"
 
@@ -283,11 +286,13 @@ free_node(NODE *node)
 	free(node);
 }
 
-static void
+/* not used now
+#static void
 free_rawcache(FORMATRAW_CACHE *rawcache)
 {
 	free(rawcache);
 }
+*/
 
 
 static void
@@ -400,7 +405,7 @@ build_tree( const char *mtpt )
 	int format;
 	int compression;
 	NODE *cur;
-	char *subtree_filter;
+	char *subtree_filter = NULL;
 	regex_t subtree;
 	int regex_error;
 	regmatch_t regmatch;
@@ -488,7 +493,6 @@ build_tree( const char *mtpt )
 	/* read all entries in archive, create node for each */
 	while( archive_read_next_header2( archive, cur->entry ) == ARCHIVE_OK ) {
 		const char *name;
-		const char *new_name;
 		/* find name of node */
 		name = archive_entry_pathname( cur->entry );
 		if( memcmp( name, "./\0", 3 ) == 0 ) {
@@ -790,7 +794,7 @@ write_new_modded_file( NODE *node, struct archive_entry *wentry,
 		int fh = 0;
 		off_t offset = 0;
 		void *buf;
-		ssize_t len;
+		ssize_t len = 0;
 		/* copy stat info */
 		if( lstat( node->location, &st ) != 0 ) {
 			log( "Could not lstat temporary file %s: %s",
@@ -1162,7 +1166,6 @@ _ar_read_raw( const char *path, char *buf, size_t size, off_t offset,
 		struct fuse_file_info *fi )
 {
 	int ret = -1;
-	const char *realpath;
 	NODE *node;
 	( void )fi;
 
@@ -1391,8 +1394,6 @@ ar_read( const char *path, char *buf, size_t size, off_t offset,
 static off_t
 _ar_getsizeraw(const char *path)
 {
-	size_t bufsize = 1024 * 1024;
-	char *buf = malloc(bufsize+1);
 	off_t offset = 0, ret;
 	NODE *node;
 	const char *realpath;
@@ -2693,7 +2694,6 @@ showUsage()
 int
 main( int argc, char **argv )
 {
-	int fuse_ret;
 	struct stat st;
 	int oldpwd;
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -2773,11 +2773,17 @@ main( int argc, char **argv )
 		char *mountpoint;
 		int multithreaded;
 		int foreground;
-		struct stat st;
+//#if FUSE_VERSION >= 27
+//		int numa;
+//#endif
 		int res;
 
 		res = fuse_parse_cmdline(&args, &mountpoint, &multithreaded,
+//#if FUSE_VERSION >= 27
+//					 &foreground, &numa);
+//#else
 					 &foreground);
+//#endif
 		if (res == -1)
 			exit(1);
 
@@ -2823,12 +2829,21 @@ main( int argc, char **argv )
 		free(mountpoint);
 	}
 #else
-	/* now do the real mount */
-	fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
+	{
+		/* now do the real mount */
+		int fuse_ret;
+		fuse_ret = fuse_main( args.argc, args.argv, &ar_oper, NULL );
+	}
 #endif
 
 	/* go back to saved dir */
-	fchdir( oldpwd );
+	{
+		int fchdir_ret;
+		fchdir_ret = fchdir( oldpwd );
+		if (fchdir_ret != 0) {
+			log( "fchdir() to old path failed\n" );
+		}
+	}
 
 	/* save changes if modified */
 	if( archiveWriteable && !options.readonly && archiveModified && !options.nosave ) {

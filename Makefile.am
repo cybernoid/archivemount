@@ -1,5 +1,5 @@
 bin_PROGRAMS = archivemount
-archivemount_SOURCES = archivemount.c uthash.h
+archivemount_SOURCES = archivemount.c uthash.h archivecomp.h
 archivemount_LDADD = $(ARCHIVE_LIBS) $(FUSE_LIBS)
 archivemount_CFLAGS = $(FUSE_CFLAGS) -D_FILE_OFFSET_BITS=64
 if DEBUG
