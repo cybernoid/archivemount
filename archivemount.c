@@ -2773,17 +2773,17 @@ main( int argc, char **argv )
 		char *mountpoint;
 		int multithreaded;
 		int foreground;
-//#if FUSE_VERSION >= 27
-//		int numa;
-//#endif
+#ifdef FUSE_NUMA
+		int numa;
+#endif
 		int res;
 
 		res = fuse_parse_cmdline(&args, &mountpoint, &multithreaded,
-//#if FUSE_VERSION >= 27
-//					 &foreground, &numa);
-//#else
+#ifdef FUSE_NUMA
+					 &foreground, &numa);
+#else
 					 &foreground);
-//#endif
+#endif
 		if (res == -1)
 			exit(1);
 
