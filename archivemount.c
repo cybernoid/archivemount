@@ -739,7 +739,7 @@ get_temp_file_name( const char *path, char **location )
 	}
 	sprintf( *location, "%s/archivemount%s_XXXXXX", P_tmpdir, tmppath );
 	free( tmppath );
-	if( ( fh = mkstemp( *location ) == -1 ) ) {
+	if( ( fh = mkstemp( *location ) )  == -1 ) {
 		log( "Could not create temp file name %s: %s",
 				*location, strerror( errno ) );
 		free( *location );
@@ -1560,7 +1560,7 @@ ar_mkdir( const char *path, mode_t mode )
 		return -EEXIST;
 	}
 	/* create name for temp dir */
-	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+	if( ( tmp = get_temp_file_name( path, &location ) ) < 0 ) {
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
@@ -1902,7 +1902,7 @@ _ar_truncate( const char *path, off_t size )
 		int tmpoffset = 0;
 		int64_t tmpsize;
 		struct fuse_file_info fi;
-		if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+		if( ( tmp = get_temp_file_name( path, &location ) ) < 0 ) {
 			return tmp;
 		}
 		if( ( fh = open( location, O_WRONLY | O_CREAT | O_EXCL,
@@ -2039,7 +2039,7 @@ _ar_write( const char *path, const char *buf, size_t size,
 		char *tmpbuf = NULL;
 		int tmpoffset = 0;
 		int64_t tmpsize;
-		if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+		if( ( tmp = get_temp_file_name( path, &location ) ) < 0 ) {
 			return tmp;
 		}
 		if( ( fh = open( location, O_WRONLY | O_CREAT | O_EXCL,
@@ -2146,7 +2146,7 @@ ar_mknod( const char *path, mode_t mode, dev_t rdev )
 		return -EEXIST;
 	}
 	/* create name for temp file */
-	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+	if( ( tmp = get_temp_file_name( path, &location ) ) < 0 ) {
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
@@ -2584,7 +2584,7 @@ ar_create( const char *path, mode_t mode, struct fuse_file_info *fi )
 		return -EEXIST;
 	}
 	/* create name for temp file */
-	if( ( tmp = get_temp_file_name( path, &location ) < 0 ) ) {
+	if( ( tmp = get_temp_file_name( path, &location ) ) < 0 ) {
 		pthread_mutex_unlock( &lock );
 		return tmp;
 	}
