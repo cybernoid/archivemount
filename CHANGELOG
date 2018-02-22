@@ -1,3 +1,4 @@
+* 0.8.9 - fixed wrong insert into tree when aa subdir had the same name as its parent dir
 * 0.8.8 - fixed bug when creating a new file and moving it over an old one,
           happens e.g. when saving a file from the geany editor
 * 0.8.7 - contribution by KAICHO:

@@ -334,7 +334,7 @@ insert_by_path(NODE *root, NODE *node)
 
 		strncpy(nam, key, namlen);
 		nam[namlen] = '\0';
-		if (strcmp(cur->basename, nam) != 0) {
+		if (cur != root || strcmp(cur->basename, nam) != 0) {
 			cur = cur->child;
 			while (cur && strcmp(cur->basename, nam) != 0)
 			{
