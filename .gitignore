@@ -6,7 +6,7 @@ dep
 Makefile
 Makefile.in
 aclocal.m4
-archivemount-0.8.7.tar.gz
+archivemount-*.tar.gz
 archivemount.1
 autom4te.cache/
 compile
