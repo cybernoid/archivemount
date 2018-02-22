@@ -1,3 +1,5 @@
+* 0.8.8 - fixed bug when creating a new file and moving it over an old one,
+          happens e.g. when saving a file from the geany editor
 * 0.8.7 - contribution by KAICHO:
           * fixup to 0.8.6: corrected an ifdef
 * 0.8.6 - contribution by KAICHO:
@@ -25,7 +27,7 @@
           * simplifications in the code
           * speedup by using hashes
 * 0.6.2 - contributions by Niels de Vos:
-          * exchanged posix_rwlocks against mutexes to finally get rid of 
+          * exchanged posix_rwlocks against mutexes to finally get rid of
             the crashes
           * replaced some accidental indentations with space against proper tabs
 * 0.6.1 - clarified licensing issue (thanks to Niels de Vos for pointing it out)

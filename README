@@ -9,6 +9,7 @@ Installation
 ------------
 From version 0.6.0 on archivemount uses autoconf, so just do the normal
 
+autoreconf -i
 ./configure && make && sudo make install
 
 to build archivemount and install it to /usr/local. For building it,
