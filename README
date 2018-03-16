@@ -5,6 +5,11 @@ Archivemount is a piece of glue code between libarchive
 (http://fuse.sourceforge.net). It can be used to mount a (possibly compressed)
 archive (as in .tar.gz or .tar.bz2) and use it like an ordinary filesystem.
 
+Requirements
+------------
+You will need autoconf, libarchive-dev and libfuse-dev for building
+archivemont, as well as GNU make and gcc of course.
+
 Installation
 ------------
 From version 0.6.0 on archivemount uses autoconf, so just do the normal

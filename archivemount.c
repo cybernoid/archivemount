@@ -1,6 +1,6 @@
 /*
 
-   Copyright (c) 2005-2010 Andre Landwehr <andrel@cybernoia.de>
+   Copyright (c) 2005-2018 Andre Landwehr <andrel@cybernoia.de>
 
    This program can be distributed under the terms of the GNU LGPL.
    See the file COPYING.
@@ -698,12 +698,27 @@ rename_recursively(NODE *start, const char *from, const char *to)
 	char *newName;
 	int ret = 0;
 	NODE *node = start;
-
+	/* removing and re-inserting nodes while iterating through
+	   the hashtable is a bad idea, so we copy all node ptrs
+	   into an array first and iterate over that instead */
+	size_t count = HASH_COUNT(start);
+	NODE *nodes[count];
+	log ("%s has %u items", start->parent->name, count);
+	NODE **dst = &nodes[0];
 	while (node) {
+		*dst = node;
+		++dst;
+		node = node->hh.next;
+	}
+
+	size_t i;
+	for (i=0; i<count; ++i) {
+		node = nodes[i];
 		if (node->child) {
 			/* recurse */
 			ret = rename_recursively(node->child, from, to);
 		}
+		remove_child(node);
 		/* change node name */
 		individualName = node->name + strlen(from);
 		if (*to != '/') {
@@ -721,13 +736,13 @@ rename_recursively(NODE *start, const char *from, const char *to)
 			}
 			sprintf(newName, "%s%s", to, individualName);
 		}
+		log ("new name: '%s'", newName);
 		correct_hardlinks_to_node(root, node->name, newName);
 		free(node->name);
 		node->name = newName;
 		node->basename = strrchr(node->name, '/') + 1;
 		node->namechanged = 1;
-		/* iterate */
-		node = node->hh.next;
+		insert_by_path(root, node);
 	}
 	return ret;
 }
@@ -2429,11 +2444,6 @@ ar_rename(const char *from, const char *to)
 			}
 		}
 	}
-	if (from_node->child) {
-		/* it is a directory, recursive change of all from_nodes
-		 * below it is required */
-		ret = rename_recursively(from_node->child, from, to);
-	}
 	/* meta data is changed in save() */
 	/* change from_node name */
 	if (*to != '/') {
@@ -2450,15 +2460,23 @@ ar_rename(const char *from, const char *to)
 			return -ENOMEM;
 		}
 	}
+	remove_child(from_node);
 	old_name = from_node->name;
 	from_node->name = temp_name;
 	from_node->basename = strrchr(from_node->name, '/') + 1;
 	from_node->namechanged = 1;
 	correct_name_in_entry (from_node);
-	remove_child(from_node);
 	ret = insert_by_path(root, from_node);
+	if (0 != ret) {
+		log ("failed to re-insert node %s", from_node->name);
+	}
 	correct_hardlinks_to_node(root, old_name, from_node->name);
 	free(old_name);
+	if (from_node->child) {
+		/* it is a directory, recursive change of all from_nodes
+		 * below it is required */
+		ret = rename_recursively(from_node->child, from, to);
+	}
 	archiveModified = 1;
 	pthread_mutex_unlock(&lock);
 	return ret;

@@ -1,57 +1,57 @@
-* 0.8.9 - fixed wrong insert into tree when aa subdir had the same name as its parent dir
-* 0.8.8 - fixed bug when creating a new file and moving it over an old one,
-          happens e.g. when saving a file from the geany editor
-* 0.8.7 - contribution by KAICHO:
-          * fixup to 0.8.6: corrected an ifdef
-* 0.8.6 - contribution by KAICHO:
-          * adaptions for CentOS, RHEL and Scientific Linux
-* 0.8.5 - fixed stat'ing of hardlinks in ar_readdir
-        - contributions by Alain Parmentier:
-          * FormatRaw optimization
-          * bugfix : use of off_t to support 64bits
-* 0.8.4 - added option -o formatraw for readonly support of the FormatRaw
-          archive files supported by libarchive (kudos to Lee Leahu)
-        - bugfix: do not do the fuse mount when the archive cannot be read
-	  (also kudos to Lee Leahu)
-* 0.8.3 - do not call fuse_main anymore
-        - force fuse into single-threaded mode due to libarchive not being
-	  thread-safe
-	Both patches contributed by Timothy Hobbs <timothyhobbs@seznam.cz>,
-	who found them in the Fedora RPM.
-* 0.8.2 - added nosave option, contributed by
-          Timothy Hobbs <timothyhobbs@seznam.cz>
-* 0.8.1 - added missing header file
-* 0.8.0 - contributions by Tomáš Čech <sleep_walker@suse.cz>:
-          * Allow mounting only subtree of archive, strip common part of
-            path in that case.
-* 0.7.0 - contributions by Andrew Brampton:
-          * simplifications in the code
-          * speedup by using hashes
-* 0.6.2 - contributions by Niels de Vos:
-          * exchanged posix_rwlocks against mutexes to finally get rid of
-            the crashes
-          * replaced some accidental indentations with space against proper tabs
-* 0.6.1 - clarified licensing issue (thanks to Niels de Vos for pointing it out)
-* 0.6.0 - contributions by Thomas J. Duck:
-          * autoconf/automake support
-          * bug reports and fixes for mac-fuse
-          many thanks for this!
-* 0.5.3 - bugfix: copying a file into a mounted archive failed when target
-          existed and was not modified before. Fixed that.
-* 0.5.2 - bugfix: fix for archives that contain files inside directories before
-          the directory entry itself
-* 0.5.1 - bugfix: when filenames inside an archive started with "./" they were
-          not shown. Fixed that.
-* 0.5.0 - bugfix: everytime a file was created where the uid or gid could not
-          be resolved into a user/group name, the previous version crashed
-* 0.4.0 - write support (everything but symlinks); NO GUARANTEE FOR YOUR DATA
-        - the usual amount of bug fixes
-        - new parameter "-v" / "--version"
-        - made dist-target in Makefile work
-        - version numbers have three parts now, major, minor and release
-* 0.3   - preliminary write support (metadata only)
-        - many many bugfixes, especially reading works now more than once..
-* 0.2   - major code cleanup
-        - implemented ar_readlink()
-* 0.1   - initial release, read-only support
-
+* 0.8.10  - fixed renaming of directories, it did not work at all anymore
+* 0.8.9   - fixed wrong insert into tree when aa subdir had the same name as its parent dir
+* 0.8.8   - fixed bug when creating a new file and moving it over an old one,
+            happens e.g. when saving a file from the geany editor
+* 0.8.7   - contribution by KAICHO:
+            * fixup to 0.8.6: corrected an ifdef
+* 0.8.6   - contribution by KAICHO:
+            * adaptions for CentOS, RHEL and Scientific Linux
+* 0.8.5   - fixed stat'ing of hardlinks in ar_readdir
+          - contributions by Alain Parmentier:
+            * FormatRaw optimization
+            * bugfix : use of off_t to support 64bits
+* 0.8.4   - added option -o formatraw for readonly support of the FormatRaw
+            archive files supported by libarchive (kudos to Lee Leahu)
+          - bugfix: do not do the fuse mount when the archive cannot be read
+	    (also kudos to Lee Leahu)
+* 0.8.3   - do not call fuse_main anymore
+          - force fuse into single-threaded mode due to libarchive not being
+	    thread-safe
+          Both patches contributed by Timothy Hobbs <timothyhobbs@seznam.cz>,
+          who found them in the Fedora RPM.
+* 0.8.2   - added nosave option, contributed by
+            Timothy Hobbs <timothyhobbs@seznam.cz>
+* 0.8.1   - added missing header file
+* 0.8.0   - contributions by Tomáš Čech <sleep_walker@suse.cz>:
+            * Allow mounting only subtree of archive, strip common part of
+              path in that case.
+* 0.7.0   - contributions by Andrew Brampton:
+            * simplifications in the code
+            * speedup by using hashes
+* 0.6.2   - contributions by Niels de Vos:
+            * exchanged posix_rwlocks against mutexes to finally get rid of
+              the crashes
+            * replaced some accidental indentations with space against proper tabs
+* 0.6.1   - clarified licensing issue (thanks to Niels de Vos for pointing it out)
+* 0.6.0   - contributions by Thomas J. Duck:
+            * autoconf/automake support
+            * bug reports and fixes for mac-fuse
+            many thanks for this!
+* 0.5.3   - bugfix: copying a file into a mounted archive failed when target
+            existed and was not modified before. Fixed that.
+* 0.5.2   - bugfix: fix for archives that contain files inside directories before
+            the directory entry itself
+* 0.5.1   - bugfix: when filenames inside an archive started with "./" they were
+            not shown. Fixed that.
+* 0.5.0   - bugfix: everytime a file was created where the uid or gid could not
+            be resolved into a user/group name, the previous version crashed
+* 0.4.0   - write support (everything but symlinks); NO GUARANTEE FOR YOUR DATA
+          - the usual amount of bug fixes
+          - new parameter "-v" / "--version"
+          - made dist-target in Makefile work
+          - version numbers have three parts now, major, minor and release
+* 0.3     - preliminary write support (metadata only)
+          - many many bugfixes, especially reading works now more than once..
+* 0.2     - major code cleanup
+          - implemented ar_readlink()
+* 0.1     - initial release, read-only support
