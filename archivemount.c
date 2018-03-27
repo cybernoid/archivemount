@@ -752,22 +752,17 @@ rename_recursively(NODE *start, const char *from, const char *to)
 static int
 get_temp_file_name(const char *path, char **location)
 {
-	char *tmppath;
-	char *tmp;
 	int fh;
 
 	/* create name for temp file */
-	tmp = tmppath = strdup(path);
-	do if (*tmp == '/') *tmp = '_'; while (*(tmp++));
 	if ((*location = (char *)malloc(
 				strlen(P_tmpdir) +
-				strlen("_archivemount") +
-				strlen(tmppath) + 8)) == NULL) {
+				strlen("/archivemount_XXXXXX") +
+				1)) == NULL) {
 		log("Out of memory");
 		return -ENOMEM;
 	}
-	sprintf(*location, "%s/archivemount%s_XXXXXX", P_tmpdir, tmppath);
-	free(tmppath);
+	sprintf(*location, "%s/archivemount_XXXXXX", P_tmpdir);
 	if ((fh = mkstemp(*location))  == -1) {
 		log("Could not create temp file name %s: %s",
 			*location, strerror(errno));

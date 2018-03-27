@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script
 
-AC_INIT([archivemount],[0.8.11], [andrel@cybernoia.de])
+AC_INIT([archivemount],[0.8.12], [andrel@cybernoia.de])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
 
@@ -8,7 +8,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile archivemount.1])
 
 
-RELEASE_DATE="15 August 2013"
+RELEASE_DATE="27 March 2019"
 AC_SUBST(RELEASE_DATE)
 
 CFLAGS=
@@ -48,7 +48,7 @@ AC_CHECK_HEADERS([regex.h],,
 
 # Debug support
 AC_MSG_CHECKING(if you want debug support)
-debug_on=no
+debug_on=yes
 AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
                                     [enable debug support (def=no)]),
               debug_on="$enableval")

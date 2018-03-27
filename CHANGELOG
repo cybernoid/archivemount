@@ -1,3 +1,5 @@
+* 0.8.12  - changed naming scheme of temporary files to avoid running
+            into too long names for the filesystem in /tmp
 * 0.8.11  - fixed accidentally broken renaming of files
 * 0.8.10  - fixed renaming of directories, it did not work at all anymore
 * 0.8.9   - fixed wrong insert into tree when aa subdir had the same name as its parent dir
