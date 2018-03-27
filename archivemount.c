@@ -617,8 +617,10 @@ correct_name_in_entry (NODE *node)
 		node->name[0] == '/' &&
 		archive_entry_pathname(root->child->entry)[0] != '/')
 	{
+		log ("correcting name in entry to '%s'", node->name+1);
 		archive_entry_set_pathname(node->entry, node->name + 1);
 	} else {
+		log ("correcting name in entry to '%s'", node->name);
 		archive_entry_set_pathname(node->entry, node->name);
 	}
 }
@@ -2461,17 +2463,15 @@ ar_rename(const char *from, const char *to)
 		}
 	}
 	remove_child(from_node);
-	old_name = from_node->name;
+	correct_hardlinks_to_node(root, from_node->name, temp_name);
+	free(from_node->name);
 	from_node->name = temp_name;
 	from_node->basename = strrchr(from_node->name, '/') + 1;
 	from_node->namechanged = 1;
-	correct_name_in_entry (from_node);
 	ret = insert_by_path(root, from_node);
 	if (0 != ret) {
 		log ("failed to re-insert node %s", from_node->name);
 	}
-	correct_hardlinks_to_node(root, old_name, from_node->name);
-	free(old_name);
 	if (from_node->child) {
 		/* it is a directory, recursive change of all from_nodes
 		 * below it is required */
