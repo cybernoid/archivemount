@@ -1,5 +1,10 @@
 * 0.8.12  - changed naming scheme of temporary files to avoid running
             into too long names for the filesystem in /tmp
+          - fixed renaming a newly created file (it got saved under its
+            original name)
+          - activated code for creating symlinks; in old versions, symlinks
+            were not saved, presumably due to a bug in libarchive, but it
+            seems to work now.
 * 0.8.11  - fixed accidentally broken renaming of files
 * 0.8.10  - fixed renaming of directories, it did not work at all anymore
 * 0.8.9   - fixed wrong insert into tree when aa subdir had the same name as its parent dir

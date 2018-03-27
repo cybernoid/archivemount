@@ -48,7 +48,7 @@ AC_CHECK_HEADERS([regex.h],,
 
 # Debug support
 AC_MSG_CHECKING(if you want debug support)
-debug_on=yes
+debug_on=no
 AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
                                     [enable debug support (def=no)]),
               debug_on="$enableval")
