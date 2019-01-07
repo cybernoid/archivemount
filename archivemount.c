@@ -1544,6 +1544,14 @@ _ar_getattr(const char *path, struct stat *stbuf)
 	}
 	stbuf->st_blocks  = (stbuf->st_size + 511) / 512;
 	stbuf->st_blksize = 4096;
+	if (S_ISDIR(archive_entry_mode(node->entry))) {
+		if (stbuf->st_nlink < 2) {
+			/* when sharing via Samba this has to be at
+			   least 2 for directories or directories will
+			   be shown as files */
+			stbuf->st_nlink = 2;
+		}
+	}
 
 	if (options.readonly) {
 		stbuf->st_mode = stbuf->st_mode & 0777555;
