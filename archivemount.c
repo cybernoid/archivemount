@@ -24,6 +24,8 @@
 #define FUSE_USE_VERSION 26
 #define MAXBUF 4096
 
+#define BLOCK_SIZE 10240
+
 #include "config.h"
 
 #include <fuse.h>
@@ -450,7 +452,7 @@ build_tree(const char *mtpt)
 			return archive_errno(archive);
 		}
 	}
-	if (archive_read_open_fd(archive, archiveFd, 10240) != ARCHIVE_OK) {
+	if (archive_read_open_fd(archive, archiveFd, BLOCK_SIZE) != ARCHIVE_OK) {
 		fprintf(stderr, "%s\n", archive_error_string(archive));
 		return archive_errno(archive);
 	}
@@ -932,7 +934,7 @@ save(const char *archiveFile)
 		log("%s", archive_error_string(oldarc));
 		return archive_errno(oldarc);
 	}
-	if (archive_read_open_fd(oldarc, archiveFd, 10240) != ARCHIVE_OK) {
+	if (archive_read_open_fd(oldarc, archiveFd, BLOCK_SIZE) != ARCHIVE_OK) {
 		log("%s", archive_error_string(oldarc));
 		return archive_errno(oldarc);
 	}
@@ -1165,7 +1167,7 @@ _ar_open_raw(void)
 		return -EIO;
 	}
 
-	archive_ret = archive_read_open_fd(rawcache->archive, archiveFd, 10240);
+	archive_ret = archive_read_open_fd(rawcache->archive, archiveFd, BLOCK_SIZE);
 	if (archive_ret != ARCHIVE_OK) {
 		log("archive_read_open_fd(): %s (%d)\n",
 			archive_error_string(rawcache->archive), archive_ret);
@@ -1337,7 +1339,7 @@ _ar_read(const char *path, char *buf, size_t size, off_t offset,
 				return -EIO;
 			}
 		}
-		archive_ret = archive_read_open_fd(archive, archiveFd, 10240);
+		archive_ret = archive_read_open_fd(archive, archiveFd, BLOCK_SIZE);
 		if (archive_ret != ARCHIVE_OK) {
 			log("archive_read_open_fd(): %s (%d)\n",
 				archive_error_string(archive), archive_ret);
@@ -1462,7 +1464,7 @@ _ar_getsizeraw(const char *path)
 		options.formatraw = 1;
 	}
 
-	archive_ret = archive_read_open_fd(archive, archiveFd, 10240);
+	archive_ret = archive_read_open_fd(archive, archiveFd, BLOCK_SIZE);
 	if (archive_ret != ARCHIVE_OK) {
 		log("archive_read_open_fd(): %s (%d)\n",
 			archive_error_string(archive), archive_ret);
