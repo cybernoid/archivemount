@@ -423,7 +423,12 @@ build_tree(const char *mtpt)
 		}
 		strcpy(subtree_filter, PREFIX);
 		subtree_filter = strcat(subtree_filter, options.subtree_filter);
+		/* \? is only a special char on Mac if REG_ENHANCED is specified  */
+#if defined REG_ENHANCED
+		regex_error = regcomp(&subtree, subtree_filter, REG_ENHANCED);
+#else
 		regex_error = regcomp(&subtree, subtree_filter, 0);
+#endif
 		if (regex_error) {
 			regerror(regex_error, &subtree, error_buffer, 256);
 			log("Regex build error: %s\n", error_buffer);
