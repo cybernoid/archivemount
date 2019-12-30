@@ -103,6 +103,9 @@ print version
 \fB\-o\fR readonly
 disable write support
 .TP
+\fB\-o\fR password
+prompt for a passphrase
+.TP
 \fB\-o\fR nobackup
 remove archive file backups
 .TP
