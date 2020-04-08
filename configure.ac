@@ -3,6 +3,7 @@
 AC_INIT([archivemount],[0.8.12], [andrel@cybernoia.de])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
+AM_PROG_CC_C_O
 
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile archivemount.1])
