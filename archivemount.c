@@ -705,7 +705,7 @@ rename_recursively(NODE *start, const char *from, const char *to)
 	   into an array first and iterate over that instead */
 	size_t count = HASH_COUNT(start);
 	NODE *nodes[count];
-	log ("%s has %u items", start->parent->name, count);
+	log ("%s has %zu items", start->parent->name, count);
 	NODE **dst = &nodes[0];
 	while (node) {
 		*dst = node;
@@ -2430,7 +2430,6 @@ ar_rename(const char *from, const char *to)
 {
 	NODE *from_node;
 	int ret = 0;
-	char *old_name;
 	char *temp_name;
 
 	log("ar_rename called, from: '%s', to: '%s'", from, to);
