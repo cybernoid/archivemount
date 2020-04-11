@@ -456,9 +456,11 @@ build_tree(const char *mtpt)
 	}
 	/* check if format or compression prohibits writability */
 	format = archive_format(archive);
-	//	log("FORMAT=%s",archive_format_name(archive));
+        log("mounted archive format is %s (0x%x)",
+            archive_format_name(archive), format);
 	compression = archive_filter_code(archive, 0);
-	//	log("COMPRESSION=%s",archive_compression_name(archive));
+        log("mounted archive compression is %s (0x%x)",
+            archive_filter_name(archive, 0), compression);
 	if (format & ARCHIVE_FORMAT_ISO9660
 		|| format & ARCHIVE_FORMAT_ISO9660_ROCKRIDGE
 		|| format & ARCHIVE_FORMAT_ZIP
@@ -938,14 +940,10 @@ save(const char *archiveFile)
 	}
 	format = archive_format(oldarc);
 	compression = archive_filter_code(oldarc, 0);
-	/*
-	   log("format of old archive is %s (%d)",
-	   archive_format_name(oldarc),
-	   format);
-	   log("compression of old archive is %s (%d)",
-	   archive_compression_name(oldarc),
-	   compression);
-	   */
+        log("mounted archive format is %s (0x%x)",
+            archive_format_name(oldarc), format);
+        log("mounted archive compression is %s (0x%x)",
+            archive_filter_name(oldarc, 0), compression);
 	/* open new archive */
 	if ((newarc = archive_write_new()) == NULL) {
 		log("Out of memory");
