@@ -938,6 +938,11 @@ save(const char *archiveFile)
 		log("%s", archive_error_string(oldarc));
 		return archive_errno(oldarc);
 	}
+        /* Read first header of oldarc so that archive format is set. */
+        if (archive_read_next_header(oldarc, &entry) != ARCHIVE_OK) {
+		log("%s", archive_error_string(oldarc));
+		return archive_errno(oldarc);
+        }
 	format = archive_format(oldarc);
 	compression = archive_filter_code(oldarc, 0);
         log("mounted archive format is %s (0x%x)",
@@ -962,38 +967,7 @@ save(const char *archiveFile)
 			archive_write_add_filter_none(newarc);
 			break;
 	}
-#if 0
 	if (archive_write_set_format(newarc, format) != ARCHIVE_OK) {
-		return -ENOTSUP;
-	}
-#endif
-	if (format & ARCHIVE_FORMAT_CPIO
-		|| format & ARCHIVE_FORMAT_CPIO_POSIX)
-	{
-		archive_write_set_format_cpio(newarc);
-		//log("set write format to posix-cpio");
-	} else if (format & ARCHIVE_FORMAT_SHAR
-		|| format & ARCHIVE_FORMAT_SHAR_BASE
-		|| format & ARCHIVE_FORMAT_SHAR_DUMP)
-	{
-		archive_write_set_format_shar(newarc);
-		//log("set write format to binary shar");
-	} else if (format & ARCHIVE_FORMAT_TAR_PAX_RESTRICTED)
-	{
-		archive_write_set_format_pax_restricted(newarc);
-		//log("set write format to binary pax restricted");
-	} else if (format & ARCHIVE_FORMAT_TAR_PAX_INTERCHANGE)
-	{
-		archive_write_set_format_pax(newarc);
-		//log("set write format to binary pax interchange");
-	} else if (format & ARCHIVE_FORMAT_TAR_USTAR
-		|| format & ARCHIVE_FORMAT_TAR
-		|| format & ARCHIVE_FORMAT_TAR_GNUTAR
-		|| format == 0)
-	{
-		archive_write_set_format_ustar(newarc);
-		//log("set write format to ustar");
-	} else {
 		log("writing archives of format %d (%s) is not "
 			"supported", format,
 			archive_format_name(oldarc));
@@ -1010,7 +984,7 @@ save(const char *archiveFile)
 		log("%s", archive_error_string(newarc));
 		return archive_errno(newarc);
 	}
-	while (archive_read_next_header(oldarc, &entry) == ARCHIVE_OK) {
+	do {
 		off_t offset;
 		const void *buf;
 		struct archive_entry *wentry;
@@ -1082,7 +1056,7 @@ save(const char *archiveFile)
 		}
 		/* clean up */
 		archive_entry_free(wentry);
-	} /* end: while read next header */
+	} while (archive_read_next_header(oldarc, &entry) == ARCHIVE_OK);
 	/* find new files to add (those do still have modified flag set */
 	while ((node = find_modified_node(root))) {
 		if (node->namechanged) {
