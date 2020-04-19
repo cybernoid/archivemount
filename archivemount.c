@@ -52,6 +52,7 @@
 #include <archive_entry.h>
 #include <pthread.h>
 #include <regex.h>
+#include <termios.h>
 
 #include "archivecomp.h"
 
@@ -92,6 +93,7 @@ typedef struct node {
 
 struct options {
 	int readonly;
+	int password;
 	int nobackup;
 	int nosave;
 	char *subtree_filter;
@@ -115,6 +117,7 @@ enum {
 static struct fuse_opt ar_opts[] =
 {
 	AR_OPT("readonly", readonly, 1),
+	AR_OPT("password", password, 1),
 	AR_OPT("nobackup", nobackup, 1),
 	AR_OPT("nosave"  , nosave  , 1),
 	AR_OPT("subtree=%s", subtree_filter, 1),
@@ -142,6 +145,8 @@ static FORMATRAW_CACHE *rawcache;
 struct options options;
 char *mtpt = NULL;
 char *archiveFile = NULL;
+char *user_passphrase = NULL;
+size_t user_passphrase_size = 0;
 pthread_mutex_t lock; /* global node tree lock */
 
 /* Taken from the GNU under the GPL */
@@ -172,6 +177,7 @@ usage(const char *progname)
 		"\n"
 		"archivemount options:\n"
 		"    -o readonly	    disable write support\n"
+		"    -o password	    prompt for a password.\n"
 		"    -o nobackup	    remove archive file backups\n"
 		"    -o nosave		    do not save changes upon unmount.\n"
 		"			    Good if you want to change something\n"
@@ -453,6 +459,12 @@ build_tree(const char *mtpt)
 		options.readonly = 1;
 	} else {
 		if (archive_read_support_format_all(archive) != ARCHIVE_OK) {
+			fprintf(stderr, "%s\n", archive_error_string(archive));
+			return archive_errno(archive);
+		}
+	}
+	if (options.password) {
+		if (archive_read_add_passphrase(archive, user_passphrase) != ARCHIVE_OK) {
 			fprintf(stderr, "%s\n", archive_error_string(archive));
 			return archive_errno(archive);
 		}
@@ -939,6 +951,12 @@ save(const char *archiveFile)
 		log("%s", archive_error_string(oldarc));
 		return archive_errno(oldarc);
 	}
+	if (options.password) {
+		if (archive_read_add_passphrase(oldarc, user_passphrase) != ARCHIVE_OK) {
+			fprintf(stderr, "%s\n", archive_error_string(oldarc));
+			return archive_errno(oldarc);
+		}
+	}
 	if (archive_read_open_fd(oldarc, archiveFd, BLOCK_SIZE) != ARCHIVE_OK) {
 		log("%s", archive_error_string(oldarc));
 		return archive_errno(oldarc);
@@ -1014,6 +1032,20 @@ save(const char *archiveFile)
 	if (tempfile == -1) {
 		log("could not open new archive file for writing");
 		return 0 - errno;
+	}
+	if (options.password) {
+		/* When libarchive gains support for multiple kinds of encryption and
+		 * an API to say which kind is in use, this should use copy oldarc's
+		 * encryption settings.  For now, just set the one kind of encryption
+		 * that libarchive supports. */
+		if (archive_write_set_options(newarc, "zip:encryption=aes256") != ARCHIVE_OK) {
+			log("Could not set encryption for new archive: %s", archive_error_string(newarc));
+			return archive_errno(newarc);
+		}
+		if (archive_write_set_passphrase(newarc, user_passphrase) != ARCHIVE_OK) {
+			log("Could not set passphrase for new archive: %s", archive_error_string(newarc));
+			return archive_errno(newarc);
+		}
 	}
 	if (archive_write_open_fd(newarc, tempfile) != ARCHIVE_OK) {
 		log("%s", archive_error_string(newarc));
@@ -1170,6 +1202,12 @@ _ar_open_raw(void)
 		log("archive_read_support_format_raw(): %s (%d)\n",
 			archive_error_string(rawcache->archive), archive_ret);
 		return -EIO;
+	}
+	if (options.password) {
+		if (archive_read_add_passphrase(rawcache->archive, user_passphrase) != ARCHIVE_OK) {
+			fprintf(stderr, "%s\n", archive_error_string(rawcache->archive));
+			return archive_errno(rawcache->archive);
+		}
 	}
 
 	archive_ret = archive_read_open_fd(rawcache->archive, archiveFd, BLOCK_SIZE);
@@ -1344,6 +1382,12 @@ _ar_read(const char *path, char *buf, size_t size, off_t offset,
 				return -EIO;
 			}
 		}
+		if (options.password) {
+			if (archive_read_add_passphrase(archive, user_passphrase) != ARCHIVE_OK) {
+				fprintf(stderr, "%s\n", archive_error_string(archive));
+				return archive_errno(archive);
+			}
+		}
 		archive_ret = archive_read_open_fd(archive, archiveFd, BLOCK_SIZE);
 		if (archive_ret != ARCHIVE_OK) {
 			log("archive_read_open_fd(): %s (%d)\n",
@@ -1467,6 +1511,13 @@ _ar_getsizeraw(const char *path)
 		}
 		options.readonly = 1;
 		options.formatraw = 1;
+	}
+
+	if (options.password) {
+		if (archive_read_add_passphrase(archive, user_passphrase) != ARCHIVE_OK) {
+			fprintf(stderr, "%s\n", archive_error_string(archive));
+			return archive_errno(archive);
+		}
 	}
 
 	archive_ret = archive_read_open_fd(archive, archiveFd, BLOCK_SIZE);
@@ -2758,6 +2809,56 @@ showUsage()
 	fprintf(stderr, "Usage:	      (-v|--version)\n");
 }
 
+void setEcho(int echo)
+{
+	struct termios t;
+	tcgetattr(STDIN_FILENO, &t);
+	t.c_lflag = (t.c_lflag & ~ECHO) | (echo ? ECHO : 0);
+	tcsetattr(STDIN_FILENO, TCSANOW, &t);
+}
+
+/* This is basically getline(3), re-implemented to avoid requiring
+ * _POSIX_C_SOURCE >= 200809L. */
+ssize_t getLine(char **lineptr, size_t *n, FILE *stream) {
+	const int delim = '\n';
+	int can_realloc = 0;
+	ssize_t count = 0;
+	if (*lineptr == NULL && *n == 0) {
+		can_realloc = 1;
+		*n = 16;
+		*lineptr = malloc(*n);
+		if (*lineptr == NULL) return -1;
+	}
+	for (;;) {
+		if (count >= *n - 1) {
+			if (can_realloc) {
+				*n *= 2;
+				lineptr = realloc(lineptr, *n);
+				if (*lineptr == NULL) return -1;
+			} else {
+				(*lineptr)[*n] = '\0';
+				return *n;
+			}
+		}
+		int c = fgetc(stream);
+		switch (c) {
+			default:    (*lineptr)[count++] = c;    break;
+			case delim: (*lineptr)[count++] = c;    /* fall through */
+			case EOF:   (*lineptr)[count]   = '\0';
+			            return (c == delim || feof(stream)) ? count : -1;
+		}
+	}
+}
+
+ssize_t getPassphrase(char **lineptr, size_t *n, FILE *stream) {
+	ssize_t ret = getLine(lineptr, n, stream);
+	/* Strip newline off the end */
+	if (ret > 0 && (*lineptr)[ret - 1] == '\n') {
+		(*lineptr)[--ret] = '\0';
+	}
+	return ret;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -2789,6 +2890,14 @@ main(int argc, char **argv)
 		fprintf(stderr, "Problem with mountpoint: %s\n",
 			strerror(ENOTDIR));
 		exit(EXIT_FAILURE);
+	}
+
+	if (options.password) {
+		setEcho(0);
+		fputs("Enter passphrase:", stderr);
+		getPassphrase(&user_passphrase, &user_passphrase_size, stdin);
+		fputs("\n", stderr);
+		setEcho(1);
 	}
 
 	if (!options.readonly) {
@@ -2921,6 +3030,10 @@ main(int argc, char **argv)
 
 	/* clean up */
 	close(archiveFd);
+	if (options.password) {
+		memset(user_passphrase, 0, user_passphrase_size);
+		free(user_passphrase);
+	}
 
 	return EXIT_SUCCESS;
 }
