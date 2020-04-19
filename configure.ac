@@ -1,6 +1,6 @@
 # Process this file with autoconf to produce a configure script
 
-AC_INIT([archivemount],[0.8.12], [andrel@cybernoia.de])
+AC_INIT([archivemount],[0.9.0], [andrel@cybernoia.de])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -9,7 +9,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile archivemount.1])
 
 
-RELEASE_DATE="27 March 2019"
+RELEASE_DATE="19 April 2020"
 AC_SUBST(RELEASE_DATE)
 
 CFLAGS=
