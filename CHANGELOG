@@ -1,3 +1,4 @@
+          - added option -o password, contributed by Scott Worley
 * 0.8.12  - changed naming scheme of temporary files to avoid running
             into too long names for the filesystem in /tmp
           - fixed renaming a newly created file (it got saved under its
