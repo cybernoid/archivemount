@@ -12,8 +12,6 @@ AC_CONFIG_FILES([Makefile archivemount.1])
 RELEASE_DATE="19 April 2020"
 AC_SUBST(RELEASE_DATE)
 
-CFLAGS=
-
 # Check for libfuse
 PKG_CHECK_EXISTS(fuse)
 PKG_CHECK_MODULES([FUSE], [fuse >= 2.6],,
