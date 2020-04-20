@@ -2791,7 +2791,6 @@ void setEcho(int echo)
 /* This is basically getline(3), re-implemented to avoid requiring
  * _POSIX_C_SOURCE >= 200809L. */
 ssize_t getLine(char **lineptr, size_t *n, FILE *stream) {
-	const int delim = '\n';
 	int can_realloc = 0;
 	ssize_t count = 0;
 	if (*lineptr == NULL && *n == 0) {
@@ -2814,9 +2813,9 @@ ssize_t getLine(char **lineptr, size_t *n, FILE *stream) {
 		int c = fgetc(stream);
 		switch (c) {
 			default:    (*lineptr)[count++] = c;    break;
-			case delim: (*lineptr)[count++] = c;    /* fall through */
+			case '\n':  (*lineptr)[count++] = c;    /* fall through */
 			case EOF:   (*lineptr)[count]   = '\0';
-			            return (c == delim || feof(stream)) ? count : -1;
+			            return (c == '\n' || feof(stream)) ? count : -1;
 		}
 	}
 }
