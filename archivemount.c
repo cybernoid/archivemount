@@ -193,6 +193,21 @@ usage(const char *progname)
 		"\n",progname);
 }
 
+// fuse_mnt_parse_fuse_fd was copied from libfuse's lib/mount_util.c.
+static int //
+fuse_mnt_parse_fuse_fd(const char *mountpoint)
+{
+	int fd = -1;
+	int len = 0;
+
+	if (sscanf(mountpoint, "/dev/fd/%u%n", &fd, &len) == 1 &&
+			len == strlen(mountpoint)) {
+		return fd;
+	}
+
+	return -1;
+}
+
 static struct fuse_operations ar_oper;
 
 static int
@@ -406,7 +421,7 @@ insert_by_path(NODE *root, NODE *node)
 }
 
 static int
-build_tree(const char *mtpt)
+build_tree(mode_t mtpt_mode)
 {
 	struct archive *archive;
 	struct stat st;
@@ -501,11 +516,9 @@ build_tree(const char *mtpt)
 	}
 	archive_entry_set_gid(root->entry, getgid());
 	archive_entry_set_uid(root->entry, getuid());
-	archive_entry_set_mode(root->entry, st.st_mtime);
 	archive_entry_set_pathname(root->entry, "/");
 	archive_entry_set_size(root->entry, st.st_size);
-	stat(mtpt, &st);
-	archive_entry_set_mode(root->entry, st.st_mode);
+	archive_entry_set_mode(root->entry, mtpt_mode);
 
 	if ((cur = init_node()) == NULL) {
 		return -ENOMEM;
@@ -2833,6 +2846,7 @@ int
 main(int argc, char **argv)
 {
 	struct stat st;
+	mode_t mtpt_mode;
 	int oldpwd;
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
@@ -2856,7 +2870,14 @@ main(int argc, char **argv)
 		perror("Error stat'ing mountpoint");
 		exit(EXIT_FAILURE);
 	}
-	if (! S_ISDIR(st.st_mode)) {
+	/* Check that the mountpoint is either a /dev/fd/%u pre-mounted file
+	 * descriptor or a directory on the file system. For a file descriptor,
+	 * the build_tree function still expects mode bits whose file type
+	 * satisfies S_ISDIR. */
+	mtpt_mode = st.st_mode;
+	if (fuse_mnt_parse_fuse_fd(mtpt) >= 0) {
+		mtpt_mode = (mtpt_mode & ~S_IFMT) | S_IFDIR;
+	} else if (! S_ISDIR(st.st_mode)) {
 		fprintf(stderr, "Problem with mountpoint: %s\n",
 			strerror(ENOTDIR));
 		exit(EXIT_FAILURE);
@@ -2888,7 +2909,7 @@ main(int argc, char **argv)
 		perror("opening archive failed");
 		return EXIT_FAILURE;
 	}
-	if (build_tree(mtpt) != 0) {
+	if (build_tree(mtpt_mode) != 0) {
 		exit(EXIT_FAILURE);
 	}
 
