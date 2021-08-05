@@ -2833,7 +2833,7 @@ int
 main(int argc, char **argv)
 {
 	struct stat st;
-	int oldpwd;
+	int oldpwd = -1;
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
 	/* parse cmdline args */
@@ -2877,6 +2877,8 @@ main(int argc, char **argv)
 			archiveWriteable = 1;
 			close(archiveFd);
 		}
+		/* save directory this was started from */
+		oldpwd = open(".", 0);
 	}
 	/* We want the temporary fuser version of the archive to be writable,*/
 	/* despite never actually writing the changes to disk.*/
@@ -2900,9 +2902,6 @@ main(int argc, char **argv)
 		rawcache->st.st_size=_ar_getsizeraw("/data");
 		//log("cache st_size = %ld",rawcache->st.st_size);
 	}
-
-	/* save directory this was started from */
-	oldpwd = open(".", 0);
 
 	/* Initialize the node tree lock */
 	pthread_mutex_init(&lock, NULL);
@@ -2982,17 +2981,15 @@ main(int argc, char **argv)
 	}
 #endif
 
-	/* go back to saved dir */
-	{
+	/* save changes if modified */
+	if (archiveWriteable && !options.readonly && archiveModified && !options.nosave) {
+		/* go back to saved dir */
 		int fchdir_ret;
 		fchdir_ret = fchdir(oldpwd);
 		if (fchdir_ret != 0) {
 			log("fchdir() to old path failed\n");
 		}
-	}
 
-	/* save changes if modified */
-	if (archiveWriteable && !options.readonly && archiveModified && !options.nosave) {
 		if (save(archiveFile) != 0) {
 			log("Saving new archive failed\n");
 		}
