@@ -149,6 +149,9 @@ char *user_passphrase = NULL;
 size_t user_passphrase_size = 0;
 pthread_mutex_t lock; /* global node tree lock */
 
+const char formatraw_default_path[] = "/data";
+const char* formatraw_path = formatraw_default_path;
+
 /* Taken from the GNU under the GPL */
 char *
 strchrnul (const char *s, int c_in)
@@ -519,6 +522,9 @@ build_tree(const char *mtpt)
 		if (memcmp(name, "./\0", 3) == 0) {
 			/* special case: the directory "./" must be skipped! */
 			continue;
+		} else if (options.formatraw && (formatraw_path == formatraw_default_path)) {
+			/* save the first entry's name */
+			formatraw_path = strdup(name);
 		}
 		if (options.subtree_filter) {
 			regex_error = regexec(&subtree, name, 1, &regmatch, REG_NOTEOL);
@@ -1130,12 +1136,10 @@ _ar_open_raw(void)
 {
 	// open archive and search first entry
 
-	const char path[] = "/data";
-
 	int ret = -1;
 	const char *realpath;
 	NODE *node;
-	log("_ar_open_raw called, path: '%s'", path);
+	log("_ar_open_raw called, path: '%s'", formatraw_path);
 
 
 	if (rawcache->opened!=0) {
@@ -1147,7 +1151,7 @@ _ar_open_raw(void)
 
 	/* find node */
 
-	node = get_node_for_path(root, path);
+	node = get_node_for_path(root, formatraw_path);
 	if (! node) {
 		log("get_node_for_path error");
 		return -ENOENT;
@@ -2897,7 +2901,7 @@ main(int argc, char **argv)
 		if ((rawcache=init_rawcache()) == NULL)
 			return -ENOMEM;
 		fprintf(stderr,"Calculating uncompressed file size. Please wait.\n");
-		rawcache->st.st_size=_ar_getsizeraw("/data");
+		rawcache->st.st_size=_ar_getsizeraw(formatraw_path);
 		//log("cache st_size = %ld",rawcache->st.st_size);
 	}
 
