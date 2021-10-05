@@ -14,12 +14,16 @@ AC_SUBST(RELEASE_DATE)
 
 # Check for libfuse
 PKG_CHECK_EXISTS(fuse)
-PKG_CHECK_MODULES([FUSE], [fuse >= 2.6],,
-    AC_MSG_ERROR([libfuse>=2.6 not found.
+PKG_CHECK_MODULES([FUSE], [fuse >= 2.6],
+    AC_DEFINE([HAVE_FUSE2], [], [Need to use the fuse 2.6 API]),
+    PKG_CHECK_MODULES([FUSE], [fuse3 >= 3],
+        AC_DEFINE([HAVE_FUSE3], [], [Need to use the fuse 3.0 API]),
+        AC_MSG_ERROR([libfuse>=2.6 not found.
 
                   If libfuse is installed then perhaps you should set
                   the PKG_CONFIG_PATH=/dir/containing/fuse.pc environment
                   variable]))
+    )
 AC_SUBST([FUSE_LIBS])
 AC_SUBST([FUSE_CFLAGS])
 
